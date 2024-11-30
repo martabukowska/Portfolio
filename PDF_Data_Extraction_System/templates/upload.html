@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <title>PDF to CSV Converter</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Helvetica+Neue:wght@400;700&display=swap');
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+        body {
+            background: radial-gradient(circle at 25% 25%, #1B3559, #2F4F7F, #4F84C1);
+            background-size: 200% 200%;
+            animation: gradientAnimation 30s ease infinite;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Helvetica Neue', sans-serif;
+        }
+
+        @keyframes gradientAnimation {
+            0% { background-position: 0% 0%; }
+            50% { background-position: 100% 100%; }
+            100% { background-position: 0% 0%; }
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            margin-top: -15px;
+        }
+        .form-group label {
+            font-weight: bold;
+            color: #555;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .form-control-file {
+            display: none;
+        }
+        .upload-link {
+            color: #007bff;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .upload-link:hover {
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            position: relative;
+            background: #2A5389;
+            border: none;
+            border-radius: 25px;
+            padding: 10px 20px;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            overflow: hidden;
+            transition: background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            background: #3967A4;
+            transform: scale(1.05);
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -200%;
+            width: 200%;
+            height: 300%;
+            background: linear-gradient(45deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0));
+            transform: rotate(45deg);
+            opacity: 0;
+            transition: none;
+        }
+
+        .btn-primary:hover::before {
+            left: 200%;
+            opacity: 1;
+            transition: left 1.5s ease-out, opacity 1.5s ease-out;
+        }
+
+        h1 {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+            line-height: 0.9;
+        }
+        .content {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        footer {
+            font-size: 12px;
+            color: #e0e0e0;
+            padding: 10px 0;
+            text-align: center;
+            width: 100%;
+        }
+
+        .logo {
+            max-width: 50%;
+            height: auto;
+            margin: -15px auto 0 auto;
+        }
+    </style>
+</head>
+<body>
+<div class="content">
+    <div class="container">
+        <img src="https://fhllp.com/wp-content/uploads/2023/08/fastern.png" alt="Logo" class="logo">
+        <h1>PDF to CSV Converter</h1>
+        <form action="/upload" method="post" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="file" class="upload-link">Click to upload PDF</label>
+                <input type="file" class="form-control-file" id="file" name="file" required>
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary btn-block">Convert</button>
+            </div>
+        </form>
+    </div>
+</div>
+<footer>
+</footer>
+
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelector('.upload-link').addEventListener('click', function(event) {
+            event.preventDefault();
+            document.getElementById('file').click();
+        });
+    });
+</script>
+</body>
+</html>
