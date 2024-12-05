@@ -1,0 +1,43 @@
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOMContentLoaded event fired');
+
+        const token = localStorage.getItem('authToken');
+        console.log('Retrieved token from localStorage:', token);
+
+        if (!token) {
+            console.log('No token found, redirecting to login');
+            window.location.href = '/';
+            return;
+        }
+
+        console.log('Token found, requesting dashboard data');
+        console.log('Request URL:', '/dashboard.html');
+        console.log('Request headers:', {
+            'Authorization': 'Bearer ' + token
+        });
+
+        fetch('/dashboard.html', {
+            method: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + token
+            }
+        })
+            .then(response => {
+                console.log('Dashboard response status:', response.status);
+                console.log('Dashboard response headers:', response.headers);
+                if (!response.ok) {
+                    throw new Error('Dashboard request failed with status ' + response.status);
+                }
+                return response.text();
+            })
+            .then(html => {
+                console.log('Dashboard HTML received, length:', html.length);
+                document.getElementById('dashboard-content').innerHTML = html;
+            })
+            .catch(error => {
+                console.error('Error loading dashboard:', error);
+                document.getElementById('dashboard-content').textContent = 'Error loading dashboard: ' + error.message;
+            });
+    });
+</script>

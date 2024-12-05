@@ -1,0 +1,48 @@
+# Executables and build files
+THE_PROJECT_2_0
+*.exe
+*.out
+*.o
+build/
+.DS_Store
+
+# Additional C++ specific
+*.a
+*.lib
+*.exp
+*.ilk
+*.pdb
+*.obj
+*.idb
+*.tlog
+*.lastbuildstate
+*.sdf
+*.opensdf
+
+# CMake specific
+Makefile
+CMakeScripts/
+Testing/
+DartConfiguration.tcl
+install_manifest.txt
+
+# Dependency directories
+Crow/
+vcpkg_installed/
+jwt-cpp/
+cmake-build-debug/
+vcpkg/
+
+# Code coverage
+*.gcno
+*.gcda
+*.gcov
+
+# Temporary files
+*~
+*.swp
+*.swo
+
+# IDE specific files
+.vscode/
+.idea/

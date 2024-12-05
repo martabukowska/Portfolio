@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tax Return System Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+        }
+        #menu {
+            width: 200px;
+            background-color: #f0f0f0;
+            height: 100vh;
+            padding: 20px;
+        }
+        #menu ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        #menu li {
+            margin-bottom: 10px;
+        }
+        #menu a {
+            text-decoration: none;
+            color: #333;
+        }
+        #content {
+            flex-grow: 1;
+            padding: 20px;
+        }
+        .stat-box {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px;
+            display: inline-block;
+        }
+        #filter-form {
+            margin-bottom: 20px;
+        }
+        .site {
+            display: none;
+        }
+        .site.active {
+            display: block;
+        }
+        .logout {
+            margin-top: 20px;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+        .logout a {
+            color: #ff4444 !important;
+        }
+    </style>
+</head>
+<body>
+<div id="menu">
+    <ul>
+        <li><a href="#dashboard">Dashboard</a></li>
+        <li><a href="#report-generation">Report Generation</a></li>
+        <li><a href="#email-reminders">Email Reminders</a></li>
+        <li><a href="#project-dependencies">Project Dependencies</a></li>
+        <li><a href="#settings">Settings</a></li>
+        <li><a href="#report-upload">Report Upload</a></li>
+        <li class="logout"><a href="#" id="logoutLink">Logout</a></li>
+    </ul>
+</div>
+<div id="content">
+    <div id="dashboard" class="site active">
+        <h1>Dashboard</h1>
+        <form id="filter-form">
+            <select id="group">
+                <option value="">All Groups</option>
+            </select>
+            <select id="projectType">
+                <option value="">All Project Types</option>
+            </select>
+            <select id="manager">
+                <option value="">All Managers</option>
+            </select>
+            <select id="partner">
+                <option value="">All Partners</option>
+            </select>
+            <input type="date" id="startDate" placeholder="Start Date">
+            <input type="date" id="endDate" placeholder="End Date">
+            <button type="submit">Apply Filters</button>
+        </form>
+        <div id="statistics"></div>
+    </div>
+    <div id="report-generation" class="site">
+        <h1>Report Generation</h1>
+        <!-- Add report generation content here -->
+    </div>
+    <div id="email-reminders" class="site">
+        <h1>Email Reminders</h1>
+        <!-- Add email reminders content here -->
+    </div>
+    <div id="project-dependencies" class="site">
+        <h1>Project Dependencies</h1>
+        <!-- Add project dependencies content here -->
+    </div>
+    <div id="settings" class="site">
+        <h1>Settings</h1>
+        <!-- Content will be loaded from settings.html -->
+    </div>
+    <div id="report-upload" class="site">
+        <h1>Report Upload</h1>
+        <!-- Add report upload content here -->
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            console.error('No auth token found');
+            window.location.href = '/';
+            return;
+        }
+
+        const headers = new Headers();
+        headers.append('Authorization', 'Bearer ' + token);
+
+        function setupLogout() {
+            const logoutLink = document.getElementById('logoutLink');
+            logoutLink.addEventListener('click', function(e) {
+                e.preventDefault();
+
+                localStorage.removeItem('authToken');
+
+                fetch('/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                })
+                    .then(() => {
+                        window.location.href = '/';
+                    })
+                    .catch(error => {
+                        console.error('Logout error:', error);
+                        window.location.href = '/';
+                    });
+            });
+        }
+
+        function setupNavigation() {
+            const menuLinks = document.querySelectorAll('#menu a');
+            const sites = document.querySelectorAll('.site');
+
+            menuLinks.forEach(link => {
+                link.addEventListener('click', async function(e) {
+                    if (this.id === 'logoutLink') return;
+                    e.preventDefault();
+                    const targetId = this.getAttribute('href').substring(1);
+
+                    if (targetId === 'settings') {
+                        const settingsDiv = document.getElementById('settings');
+                        try {
+                            const response = await fetch('/settings.html');
+                            if (!response.ok) throw new Error('Failed to load settings');
+                            const html = await response.text();
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = html;
+                            // Extract only the settings-container content
+                            const settingsContainer = tempDiv.querySelector('.settings-container');
+                            if (settingsContainer) {
+                                settingsDiv.innerHTML = '<h1>Settings</h1>' + settingsContainer.outerHTML;
+                                setupPasswordChange();
+                            } else {
+                                throw new Error('Settings container not found');
+                            }
+                        } catch (error) {
+                            console.error('Error loading settings:', error);
+                            settingsDiv.innerHTML = '<h1>Settings</h1><p>Error loading settings. Please try again.</p>';
+                        }
+                    }
+
+                    sites.forEach(site => site.classList.remove('active'));
+                    document.getElementById(targetId).classList.add('active');
+                });
+            });
+        }
+
+        function setupPasswordChange() {
+            const form = document.getElementById('changePasswordForm');
+            if (!form) return;
+
+            const errorMessage = document.getElementById('errorMessage');
+            const successMessage = document.getElementById('successMessage');
+
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                const currentPassword = document.getElementById('currentPassword').value;
+                const newPassword = document.getElementById('newPassword').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+
+                // Reset messages
+                errorMessage.style.display = 'none';
+                successMessage.style.display = 'none';
+
+                // Validate passwords match
+                if (newPassword !== confirmPassword) {
+                    errorMessage.textContent = 'New passwords do not match';
+                    errorMessage.style.display = 'block';
+                    return;
+                }
+
+                // Send request to change password
+                fetch('/change-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({
+                        currentPassword: currentPassword,
+                        newPassword: newPassword
+                    })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            successMessage.textContent = 'Password changed successfully';
+                            successMessage.style.display = 'block';
+                            form.reset();
+                        } else {
+                            errorMessage.textContent = data.message || 'Failed to change password';
+                            errorMessage.style.display = 'block';
+                        }
+                    })
+                    .catch(error => {
+                        errorMessage.textContent = 'An error occurred. Please try again.';
+                        errorMessage.style.display = 'block';
+                        console.error('Error:', error);
+                    });
+            });
+        }
+
+        function populateDropdowns() {
+            console.log('Fetching filter options...');
+            fetch('/filter-options', {
+                method: 'GET',
+                headers: headers
+            })
+                .then(response => {
+                    console.log('Filter options response status:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Received filter options:', data);
+                    populateSelect('group', data.groups);
+                    populateSelect('projectType', data.projectTypes);
+                    populateSelect('manager', data.managers);
+                    populateSelect('partner', data.partners);
+                })
+                .catch(error => console.error('Error fetching filter options:', error));
+        }
+
+        function populateSelect(id, options) {
+            console.log(`Populating ${id} dropdown with options:`, options);
+            const select = document.getElementById(id);
+            if (!select) {
+                console.error(`Select element with id '${id}' not found`);
+                return;
+            }
+            select.innerHTML = '';
+            const allOption = document.createElement('option');
+            allOption.value = '';
+            allOption.textContent = `All ${id.charAt(0).toUpperCase() + id.slice(1)}s`;
+            select.appendChild(allOption);
+            if (Array.isArray(options)) {
+                options.forEach(option => {
+                    const optionElement = document.createElement('option');
+                    optionElement.value = option;
+                    optionElement.textContent = option;
+                    select.appendChild(optionElement);
+                });
+            } else {
+                console.error(`Options for ${id} is not an array:`, options);
+            }
+            console.log(`${id} dropdown populated with ${select.options.length} options`);
+        }
+
+        function fetchStatistics(filters = {}) {
+            let url = new URL('/statistics', window.location.origin);
+            Object.keys(filters).forEach(key => {
+                if (filters[key]) url.searchParams.append(key, filters[key]);
+            });
+
+            console.log('Fetching statistics from:', url.toString());
+
+            fetch(url, {
+                method: 'GET',
+                headers: headers
+            })
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    if (!response.ok) {
+                        return response.text().then(text => {
+                            throw new Error(`${response.status}: ${text}`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(stats => {
+                    console.log('Received statistics:', stats);
+                    const statisticsDiv = document.getElementById('statistics');
+                    statisticsDiv.innerHTML = `
+                        <div class="stat-box">
+                            <h3>Total Projects</h3>
+                            <p>${stats.totalProjects}</p>
+                        </div>
+                        <div class="stat-box">
+                            <h3>Not Filed</h3>
+                            <p>${stats.notFiled}</p>
+                        </div>
+                        <div class="stat-box">
+                            <h3>Not Reviewed</h3>
+                            <p>${stats.notReviewed}</p>
+                        </div>
+                        <div class="stat-box">
+                            <h3>Awaiting Corrections</h3>
+                            <p>${stats.awaitingCorrections}</p>
+                        </div>
+                        <div class="stat-box">
+                            <h3>Awaiting E-File Authorization</h3>
+                            <p>${stats.awaitingEFileAuth}</p>
+                        </div>
+                        <div class="stat-box">
+                            <h3>Unextended</h3>
+                            <p>${stats.unextended}</p>
+                        </div>
+                    `;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    if (error.message.includes('401')) {
+                        localStorage.removeItem('authToken');
+                        window.location.href = '/';
+                    }
+                });
+        }
+
+        document.getElementById('filter-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const filters = {
+                group: document.getElementById('group').value,
+                projectType: document.getElementById('projectType').value,
+                manager: document.getElementById('manager').value,
+                partner: document.getElementById('partner').value,
+                startDate: document.getElementById('startDate').value,
+                endDate: document.getElementById('endDate').value
+            };
+            fetchStatistics(filters);
+        });
+
+        // Initialize the page
+        setupNavigation();
+        setupLogout();
+        populateDropdowns();
+        fetchStatistics();
+    });
+</script>
+</body>
+</html>

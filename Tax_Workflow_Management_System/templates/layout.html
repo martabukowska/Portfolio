@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tax Return System - {% block title %}{% endblock %}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; display: flex; }
+        #menu { width: 200px; background-color: #f1f1f1; height: 100vh; padding: 20px; }
+        #content { flex-grow: 1; padding: 20px; }
+        .menu-item { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+<div id="menu">
+    <h2>Menu</h2>
+    <div class="menu-item"><a href="/dashboard">Dashboard</a></div>
+    <div class="menu-item"><a href="/generate-report">Generate Report</a></div>
+    <div class="menu-item"><a href="/project-dependencies">Project Dependencies</a></div>
+    <div class="menu-item"><a href="/reminders">Reminders</a></div>
+    <div class="menu-item"><a href="/settings">Settings</a></div>
+</div>
+<div id="content">
+    {% block content %}{% endblock %}
+</div>
+</body>
+</html>
