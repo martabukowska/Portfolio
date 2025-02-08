@@ -1,0 +1,1686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Cross Reference - Tax Return System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            height: 100vh;
+            background: #BED1EE;
+            position: relative;
+            display: flex;
+            min-height: 100vh;
+            overflow: hidden; 
+        }
+
+        #menu {
+            width: 250px;
+            height: 100vh;
+            padding: 30px 0;
+            position: fixed;
+            left: 0;
+            top: 0;
+            background: #EBECF3;
+            border-right: 1px solid rgba(219, 224, 242, 0.2);
+            z-index: 3;
+            overflow-y: hidden; 
+        }
+
+        #menu ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        #menu li {
+            position: relative;
+            margin-bottom: 5px;
+        }
+
+        #menu a {
+            color: #474973;
+            text-decoration: none;
+            padding: 12px 20px;
+            display: block;
+            transition: all 0.3s ease;
+            font-size: 1em;
+            position: relative;
+        }
+
+        #menu a:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+
+        #menu a.active {
+            background: white;
+            color: #474973;
+        }
+
+        .dashboard-content {
+            background: white;
+            padding: 40px;
+            min-height: calc(100vh - 100px);
+            margin: 0 -40px;
+            margin-top: 0; 
+        }
+
+        #menu a.active::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: white;
+            z-index: -1;
+        }
+
+        #menu a.active::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            height: 20px;
+            width: 3px;
+            background: #9785C8;
+            z-index: 1;
+        }
+
+        .logout {
+            margin-top: 20px;
+            border-top: 1px solid #B8BAC6;
+            padding-top: 20px;
+        }
+
+        .logout a {
+            color: #474973;
+            opacity: 0.8;
+        }
+
+        .menu-ball {
+            position: fixed;
+            width: 500px;
+            height: 500px;
+            left: -150px;
+            top: 30%;
+            border-radius: 50%;
+            background: radial-gradient(
+                    circle at center,
+                    rgba(255, 255, 255, 0.98) 0%,
+                    rgba(236, 235, 242, 0.95) 20%,
+                    rgba(219, 224, 242, 0.90) 40%,
+                    rgba(219, 224, 242, 0) 70%
+            );
+            filter: blur(35px);
+            z-index: 2;
+            animation: menuFloat 25s ease infinite;
+            opacity: 0.7;
+        }
+
+        .menu-header-gradient {
+            position: absolute;
+            top: 50%;
+            left: -10%;
+            width: 100%;
+            height: 40vh;
+            background: radial-gradient(
+                    circle at 40% center,
+                    #DDE3F4 0%,
+                    #DDE3F4 40%,
+                    rgba(221, 227, 244, 0.6) 55%,
+                    rgba(221, 227, 244, 0) 75%
+            );
+            filter: blur(70px);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .dashboard-header {
+            height: 95px;
+            padding: 30px 0;  
+            background: transparent;
+            position: relative;
+            z-index: 1;
+        }
+
+        .dashboard-header h1 {
+            color: #1a3353;
+            position: relative;
+            z-index: 2;
+            margin: 0;
+            font-size: 32px;
+            font-weight: 600;
+        }
+
+        #content {
+            flex: 1;
+            padding: 40px;
+            margin-left: 250px;
+            background: rgba(255, 255, 255, 0.05); 
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 4;
+            overflow-y: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1 {
+            color: #474973;
+            font-size: 32px;
+            font-weight: 600;
+            margin: 0; 
+        }
+
+        button {
+            background: #474973;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background: #6D72C3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(71, 73, 115, 0.2);
+        }
+
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .upload-button {
+            width: auto;
+            display: inline-block;
+        }
+
+        .stats-popup {
+            position: relative;
+            z-index: 1;
+            background: rgba(255, 255, 255, 1);
+            backdrop-filter: blur(5px);
+            border-radius: 24px;
+            padding: 60px 40px;
+            box-shadow: 0 5px 20px rgba(26, 51, 83, 0.1);
+            transition: transform 0.2s ease-out;
+            width: 100%;
+            min-height: 400px;
+            border: 1px solid rgba(190, 209, 238, 0.3);
+        }
+
+        .popup-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: auto;
+            z-index: 999;
+            background: transparent;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .stats-popup-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            z-index: 1000;
+            perspective: 2000px;
+            transform-style: preserve-3d;
+        }
+
+        .popup-layer-2, .popup-layer-3 {
+            position: absolute;
+            width: calc(100% + 10px);
+            height: calc(100% + 10px);
+            border-radius: 24px;
+            left: -5px;
+            right: -5px;
+            top: -5px;
+            transition: transform 0.2s ease-out;
+            pointer-events: none;
+        }
+
+        .popup-layer-2 {
+            background: rgba(151, 183, 234, 0.25); 
+            backdrop-filter: blur(5px);
+            transform: translateZ(-40px) rotate(-2deg) scale(0.98);
+            box-shadow: 0 5px 20px rgba(26, 51, 83, 0.08);
+            z-index: -1;
+            border: 1px solid rgba(190, 209, 238, 0.3); 
+        }
+
+        .popup-layer-3 {
+            background: linear-gradient(90deg, #BED1EE, #9785C8);
+            transform: translateZ(-80px) rotate(-4deg) scale(0.96);
+            box-shadow: 0 5px 20px rgba(26, 51, 83, 0.06);
+            z-index: -2;
+        }
+
+        button.close-popup {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            font-size: 32px;
+            cursor: pointer;
+            color: #474973;
+            padding: 10px;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+        }
+
+        button.close-popup:hover {
+            background: none;
+            transform: none;
+            box-shadow: none;
+            color: #474973;
+        }
+
+
+        .ai-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ai-status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #00aa55;
+            animation: pulse 2s infinite;
+        }
+
+        .ai-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .stat-item {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 24px;
+            padding: 12px 18px; 
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .stat-icon-container {
+            width: 32px; 
+            height: 32px; 
+            background: #F3F4F6;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .stat-content {
+            flex: 1;
+        }
+
+        .stat-icon-container.check-bg {
+            background: #F3F4F6; 
+        }
+
+        .stat-icon {
+            font-size: 16px;
+            color: #474973;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .stat-content {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-label {
+            color: #474973;
+            font-size: 0.85em; 
+            margin-bottom: 1px; 
+            opacity: 0.8;
+        }
+
+        .stat-number {
+            color: #474973;
+            font-size: 1.4em; 
+            font-weight: 600;
+            line-height: 1;
+        }
+
+        .stats-popup .stats-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .stats-popup {
+            background: white; 
+        }
+
+        .stats-popup .stat-item {
+            background: #F8F8FB; 
+            border-radius: 12px;
+            padding: 12px 18px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .stats-popup .stat-icon-container {
+            width: 32px;
+            height: 32px;
+            background: white;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .stats-popup .stat-content {
+            flex: 1;
+        }
+
+        .stats-popup .stat-label {
+            color: #474973;
+            font-size: 0.85em;
+            margin-bottom: 1px;
+            opacity: 0.8;
+        }
+
+        .stats-popup .stat-number {
+            color: #474973;
+            font-size: 1.4em;
+            font-weight: 600;
+            line-height: 1;
+        }
+
+        .stat-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #1a3353;
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .learning-progress {
+            width: 80%;
+            margin: 40px 0;  
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #BED1EE, #9785C8); 
+            width: 0;
+            transition: width 2.3s ease;
+        }
+
+        .cross-reference-container {
+            background: #F8F8FB;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: none;
+            width: 100%;
+            height: calc(100vh - 200px); 
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 20px; 
+        }
+
+        .section-header {
+            color: #474973;
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 13px; 
+        }
+
+        .results-container {
+            background: white;
+            padding: 25px;
+            border-radius: 16px;
+            width: 100%;
+            margin-bottom: 30px;
+        }
+
+        .results-content {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            gap:8px; 
+        }
+
+        .results-table tr {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        .results-table thead,
+        .results-table tbody {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        .results-table thead {
+            background: transparent;
+        }
+
+        .results-table tbody {
+            display: block;
+            overflow-y: auto;
+            max-height: calc(100vh - 512.5px); 
+        }
+
+        .file-upload-area {
+            background: white;
+            padding: 80px;
+            border-radius: 16px;
+            text-align: center;
+            margin: 13px 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px dashed rgba(71, 73, 115, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+        }
+
+        .file-upload-area.dragover {
+            background: rgba(71, 73, 115, 0.1);
+            border-color: #474973;
+            transform: scale(1.02);
+        }
+
+        .file-upload-area p {
+            color: #474973;
+            font-size: 18px;
+            margin: 0;
+            line-height: 1.5;
+        }
+
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            background-color: #1a3353;
+            color: white;
+            text-align: center;
+            padding: 5px 10px;
+            border-radius: 6px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        @keyframes numberChange {
+            0% { transform: translateY(-20px); opacity: 0; }
+            100% { transform: translateY(0); opacity: 1; }
+        }
+
+        .stat-value.updated {
+            animation: numberChange 0.5s ease-out;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 8px 0 24px 0; 
+            background: white;
+            border: none;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .table-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            margin: 0;
+            overflow: hidden;
+            border-radius: 12px;
+            border: none;
+            max-height: calc(100vh - 450px); 
+        }
+
+        .results-table th,
+        .results-table td,
+        .stat-label,
+        .stat-number,
+        .results-table td:last-child, 
+        .feedback-buttons,
+        .results-table td:last-child > div { 
+            color: #474973;
+        }
+
+        .results-table td {
+            padding: 8px 16px;
+            border-bottom: none;
+        }
+
+        .results-table th,
+        .results-table td {
+            width: 25%; 
+            padding: 8px 16px;
+            text-align: left;
+            border: none;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .results-table th {
+            padding: 12px 16px;
+            font-weight: 500;
+            border-bottom: 1px solid #e5e7eb;
+            background: white;
+        }
+
+        .results-table thead {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        .results-table thead tr th:first-child {
+            border-top-left-radius: 12px;
+        }
+
+        .results-table thead tr th:last-child {
+            border-top-right-radius: 12px;
+        }
+
+        .results-table tbody tr:last-child td:first-child {
+            border-bottom-left-radius: 12px;
+        }
+
+        .results-table tbody tr:last-child td:last-child {
+            border-bottom-right-radius: 12px;
+        }
+
+        .feedback-buttons {
+            display: flex;
+            gap: 4px;  
+            white-space: nowrap;
+            margin: -2px 0;  
+        }
+
+        .correct-match,
+        .incorrect-match {
+            padding: 2px 8px; 
+            border: none;
+            border-radius: 4px; 
+            cursor: pointer;
+            font-size: 13px;  
+            font-weight: 500;
+            min-width: 100px; 
+        }
+
+        .correct-match {
+            background: #10B981;
+            color: white;
+        }
+
+        .incorrect-match {
+            background: #EF4444;
+            color: white;
+        }
+
+        .correct-match:hover {
+            background: #059669;
+        }
+
+        .incorrect-match:hover {
+            background: #DC2626;
+        }
+
+        .results-table td:last-child {
+            color: #474973 !important;
+        }
+
+        .feedback-sent {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .buttons-container {
+            display: flex;
+            gap: 16px;
+            padding: 0 40px 40px 40px;
+            margin-top: 8px;
+            justify-content: center; 
+        }
+
+        .buttons-container button.download-link {
+            background: white;
+            border: 1px solid #474973;
+            color: #474973;
+        }
+
+        .buttons-container button.download-link:hover {
+            background: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(71, 73, 115, 0.2);
+            color: #474973;
+        }
+
+        .buttons-container button,
+        .buttons-container .download-link {
+            background: #474973;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: 0.3s;
+            text-decoration: none;
+        }
+
+        .buttons-container button:hover,
+        .buttons-container .download-link:hover {
+            background: #6D72C3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(71, 73, 115, 0.2);
+        }
+
+        .buttons-container button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .submit-all-feedback {
+            padding: 12px 24px;
+            background: #1a3353;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            max-width: fit-content;
+        }
+
+        .submit-all-feedback:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .submit-all-feedback:hover:not(:disabled) {
+            background: #234876;
+        }
+
+        .table-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 0;
+            padding: 0 0 4px 0;
+            color: #474973;
+            font-size: 14px; 
+        }
+
+        .entries-selector {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            color: #474973;
+        }
+
+        #pageInfo {
+            color: #474973;
+            font-size: 14px;
+        }
+
+        .entries-selector select {
+            margin: 0;
+            padding: 4px 8px;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            color: #474973;
+            font-size: 14px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .pagination-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            color: #474973;
+            font-size: 14px;
+        }
+
+        .stat-item .stat-label,
+        .stat-item .stat-number {
+            color: #474973;
+        }
+
+        .results-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .page-nav {
+            background: none;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            padding: 4px 12px;
+            color: #474973;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+
+        .page-nav:hover {
+            background: #f3f4f6;
+        }
+
+        .page-nav:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .filter-controls {
+            display: flex;
+            align-items: center;
+        }
+
+        .filter-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #474973;
+            font-size: 14px;
+            margin-left: 16px;
+        }
+
+        .filter-checkbox input {
+            cursor: pointer;
+        }
+
+        .gradient-ball {
+            position: fixed;
+            border-radius: 50%;
+            background: radial-gradient(
+                    circle at center,
+                    #B6A5F5 0%,
+                    rgba(182, 165, 245, 0.85) 20%,
+                    rgba(182, 165, 245, 0.7) 30%,
+                    rgba(182, 165, 245, 0.5) 45%,
+                    rgba(182, 165, 245, 0.3) 60%,
+                    rgba(182, 165, 245, 0.1) 80%,
+                    rgba(182, 165, 245, 0) 100%
+            );
+            filter: blur(30px);
+            z-index: 0;
+            opacity: 0.9;
+        }
+
+        .ball-1 {
+            width: 1000px;
+            height: 1000px;
+            top: -300px;
+            left: 30%;
+            animation: floatHeader 30s linear infinite;
+            z-index: 0;
+        }
+
+        .ball-2 {
+            width: 600px;
+            height: 600px;
+            top: 40%;
+            left: 60%;
+            animation-delay: -15s;
+            animation-duration: 35s;
+        }
+
+        .ball-3 {
+            width: 700px;
+            height: 700px;
+            top: 60%;
+            left: 20%;
+            animation-delay: -25s;
+            animation-duration: 40s;
+        }
+
+        .menu-ball {
+            position: fixed;
+            width: 500px;
+            height: 500px;
+            left: -150px;
+            top: 30%;
+            border-radius: 50%;
+            background: radial-gradient(
+                    circle at center,
+                    rgba(255, 255, 255, 0.98) 0%,
+                    rgba(236, 235, 242, 0.95) 20%,
+                    rgba(219, 224, 242, 0.90) 40%,
+                    rgba(219, 224, 242, 0) 70%
+            );
+            filter: blur(35px);
+            z-index: 2;
+            animation: menuFloat 25s ease infinite;
+            opacity: 0.7;
+        }
+
+        @keyframes menuFloat {
+            0% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(30px, 50px) scale(1.1); }
+            50% { transform: translate(15px, 100px) scale(0.95); }
+            75% { transform: translate(45px, 50px) scale(1.05); }
+            100% { transform: translate(0, 0) scale(1); }
+        }
+
+        @keyframes floatHeader {
+            0% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(10%, 50px) scale(1.1); }
+            50% { transform: translate(20%, 0) scale(0.95); }
+            75% { transform: translate(10%, 70px) scale(1.05); }
+            100% { transform: translate(0, 0) scale(1); }
+        }
+
+        .cross-reference-container form {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .popup-loading-state h2,
+        .popup-success-state h2 {
+            position: relative;
+            display: inline-block;
+            padding-bottom: 8px;
+            font-weight: 600;
+            color: #474973;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+
+        .popup-loading-state h2::after,
+        .popup-success-state h2::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0; 
+            height: 1px; 
+            background: linear-gradient(90deg, #BED1EE, #9785C8);
+            transition: width 0.8s ease;
+        }
+
+        .popup-loading-state.active h2::after,
+        .popup-success-state.active h2::after {
+            width: 100%; 
+        }
+
+        .popup-loading-state,
+        .popup-success-state {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease;
+            padding: 40px;
+        }
+
+        .popup-loading-state.active,
+        .popup-success-state.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .popup-loading-state.active h2::after,
+        .popup-success-state.active h2::after {
+            width: 100%; 
+        }
+
+        .popup-loading-state h3 {
+            color: #474973;
+            font-size: 20px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 16px;
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .learning-progress {
+            margin: 30px 0;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-container {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .progress-status {
+            text-align: center;
+            color: #474973;
+            font-size: 14px;
+        }
+
+        .progress-bar-wrapper {
+            width: 100%;
+            height: 8px;
+            background: #F3F4F6;
+            border-radius: 4px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #BED1EE, #9785C8);
+            transition: width 0.3s ease;
+        }
+
+    </style>
+</head>
+<body>
+<div class="gradient-ball ball-1"></div>
+<div class="gradient-ball ball-2"></div>
+<div class="gradient-ball ball-3"></div>
+<div class="gradient-ball menu-ball"></div>
+<div id="menu">
+    <div class="menu-header-gradient"></div>
+    <ul>
+        <li><a href="/dashboard.html">Dashboard</a></li>
+        <li><a href="/report-generation.html">Report Generation</a></li>
+        <li><a href="/email-reminders.html">Email Reminders</a></li>
+        <li><a href="/project-dependencies.html">Project Dependencies</a></li>
+        <li><a href="/report-upload.html">Report Upload</a></li>
+        <li><a href="/cross-reference.html" class="active">Cross Reference</a></li>
+        <li><a href="/settings.html">Settings</a></li>
+        <li class="logout"><a href="#" id="logoutLink">Logout</a></li>
+    </ul>
+</div>
+
+<div id="content">
+    <div class="dashboard-header">
+        <h1>Cross Reference</h1>
+    </div>
+    <div class="dashboard-content">
+        <div class="cross-reference-container">
+            <form id="crossReferenceForm">
+                <div class="section-header">Upload Lacerte Report</div>
+                <div class="file-upload-area" id="dropZone">
+                    <p>Drag and drop your CSV file here or click to select</p>
+                    <input type="file" id="csvFile" accept=".csv" style="display: none;">
+                </div>
+                <button type="button" class="upload-button" disabled>
+                    <span class="button-text">Upload and Process</span>
+                    <span class="button-loader" style="display: none;">Processing...</span>
+                </button>
+            </form>
+        </div>
+
+        <div class="cross-reference-container" id="resultArea" style="display: none;">
+            <div class="stats-row">
+                <div class="stat-item">
+                    <div class="stat-icon-container" style="background: #F3F4F6;">
+                        <div class="stat-icon" style="color: #474973;">📊</div>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-label">Total Processed</div>
+                        <div class="stat-number" id="totalProcessed">80</div>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-icon-container" style="background: #F3F4F6;">
+                        <div class="stat-icon" style="color: #474973;">✓</div>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-label">Matches Found</div>
+                        <div class="stat-number" id="matchesFound">73</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="results-content">
+                <div class="table-controls">
+                    <div class="entries-selector">
+                        Show
+                        <select id="entriesPerPage">
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="all">All</option>
+                        </select>
+                        entries
+                        <label class="filter-checkbox">
+                            <input type="checkbox" id="hideExactMatches">
+                            Hide Exact Matches
+                        </label>
+                    </div>
+                    <div class="pagination-controls">
+                        <button class="page-nav" id="prevPage">←</button>
+                        <span id="pageInfo">Page 1 of 8</span>
+                        <button class="page-nav" id="nextPage">→</button>
+                    </div>
+                </div>
+
+                <div class="table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                        <tr>
+                            <th>Lacerte Name</th>
+                            <th>Database Match</th>
+                            <th>Confidence</th>
+                            <th>Action</th>
+                        </tr>
+                        </thead>
+                        <tbody id="resultsTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="popup-overlay" id="statsPopupOverlay">
+            <div class="stats-popup-wrapper">
+                <div class="popup-layer-3"></div>
+                <div class="popup-layer-2"></div>
+                <div class="stats-popup" id="statsPopup">
+                    <button class="close-popup" id="closeStatsButton" type="button">×</button>
+                    <div class="popup-loading-state">
+                        <h2>Thank you for submitting feedback!</h2>
+                        <h3>AI is learning</h3>
+                        <div class="learning-progress">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progressFill"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="popup-success-state">
+                        <h2>Learning process completed!</h2>
+                        <div class="stats-row">
+                            <div class="stat-item">
+                                <div class="stat-icon-container" style="background: #F3F4F6;">
+                                    <div class="stat-icon">📊</div>
+                                </div>
+                                <div class="stat-content">
+                                    <div class="stat-label">Model Accuracy</div>
+                                    <div class="stat-number" id="modelAccuracy">--</div>
+                                </div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-icon-container" style="background: #F3F4F6;">
+                                    <div class="stat-icon">✓</div>
+                                </div>
+                                <div class="stat-content">
+                                    <div class="stat-label">Total Matches</div>
+                                    <div class="stat-number" id="totalMatches">--</div>
+                                </div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-icon-container" style="background: #F3F4F6;">
+                                    <div class="stat-icon">📈</div>
+                                </div>
+                                <div class="stat-content">
+                                    <div class="stat-label">Learning Progress</div>
+                                    <div class="stat-number" id="learningProgress">--</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="progress-container" style="display: none;">
+            <div class="progress-status">
+                <span id="progressText">Processing: 0%</span>
+                <div class="progress-bar-wrapper">
+                    <div id="progressBar" class="progress-bar-fill"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+
+    window.pendingFeedback = [];
+
+    window.currentPage = 1;
+    window.entriesPerPage = 10;
+
+    window.collectFeedback = function(rowId, lacerteName, databaseMatch, isMatch, buttonElement) {
+        const feedback = {
+            name1: lacerteName.replace(/"/g, '').trim(),
+            name2: databaseMatch.replace(/"/g, '').trim(),
+            isMatch: isMatch
+        };
+
+        window.pendingFeedback.push(feedback);
+
+        const feedbackCell = buttonElement.closest('td');
+        feedbackCell.innerHTML = isMatch ? '✅ Marked as Correct' : '❌ Marked as Incorrect';
+
+        const submitButton = document.getElementById('submitAllFeedback');
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = `Submit All Feedback (${window.pendingFeedback.length} items)`;
+        }
+    };
+
+    window.submitAllFeedback = async function() {
+        const submitButton = document.getElementById('submitAllFeedback');
+        submitButton.disabled = true;
+        submitButton.textContent = 'Submitting...';
+
+        try {
+            for (const feedback of window.pendingFeedback) {
+                const response = await fetch('/api/feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('authToken')
+                    },
+                    body: JSON.stringify(feedback)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+            }
+
+            submitButton.textContent = '✅ Feedback Submitted Successfully';
+            window.pendingFeedback = [];
+        } catch (error) {
+            console.error('Error submitting feedback:', error);
+            alert('Error submitting feedback: ' + error.message);
+            submitButton.disabled = false;
+            submitButton.textContent = `Retry Submit All Feedback (${window.pendingFeedback.length} items)`;
+        }
+    };
+
+    function resetUploadForm() {
+
+        document.querySelector('.cross-reference-container form').closest('.cross-reference-container').style.display = 'block';
+        document.getElementById('resultArea').style.display = 'none';
+        document.getElementById('csvFile').value = '';
+        const submitButton = document.querySelector('.upload-button');
+        submitButton.disabled = true;
+        submitButton.querySelector('.button-text').style.display = 'inline';
+        submitButton.querySelector('.button-loader').style.display = 'none';
+    }
+
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            window.location.href = '/';
+            return;
+        }
+
+        document.getElementById('closeStatsButton').addEventListener('click', function(e) {
+            e.stopPropagation(); 
+            const overlay = document.getElementById('statsPopupOverlay');
+            const popup = document.getElementById('statsPopup');
+            overlay.style.display = 'none';
+            popup.style.display = 'none';
+        });
+
+        document.getElementById('statsPopupOverlay').addEventListener('click', function(e) {
+            if (e.target === this) {
+                this.style.display = 'none';
+            }
+        });
+
+        let processingFile = false;
+        window.pendingFeedback = [];
+        const form = document.getElementById('crossReferenceForm');
+        const fileInput = document.getElementById('csvFile');
+        const dropZone = document.getElementById('dropZone');
+        const submitButton = document.querySelector('.upload-button');
+        const resultArea = document.getElementById('resultArea');
+
+        const overlay = document.getElementById('statsPopupOverlay');
+
+        overlay.addEventListener('click', function(e) {
+            if (e.target === this) {
+                this.style.display = 'none';
+            }
+        });
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+        });
+
+        async function updateAIStats() {
+            try {
+                console.log("Fetching AI stats...");
+                const response = await fetch('/model-stats', {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+                const stats = await response.json();
+                console.log("Received stats:", stats);
+
+                updateStatWithAnimation('modelAccuracy', (stats.accuracy * 100).toFixed(1) + '%');
+                updateStatWithAnimation('totalMatches', stats.totalMatches);
+                updateStatWithAnimation('learningProgress', stats.learningProgress);
+
+                document.getElementById('progressFill').style.width = (stats.accuracy * 100) + '%';
+            } catch (error) {
+                console.error('Failed to update AI stats:', error);
+            }
+        }
+
+        function updateStatWithAnimation(elementId, newValue) {
+            const element = document.getElementById(elementId);
+            element.classList.remove('updated');
+            element.textContent = newValue;
+            element.classList.add('updated');
+        }
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            fileInput.files = e.dataTransfer.files;
+            updateSubmitButton();
+        });
+
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', updateSubmitButton);
+
+        function updateSubmitButton() {
+            submitButton.disabled = !fileInput.files.length || processingFile;
+        }
+
+        submitButton.addEventListener('click', async (e) => {
+            e.preventDefault();
+            if (processingFile) return;
+
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            processingFile = true;
+            submitButton.disabled = true;
+            submitButton.querySelector('.button-text').style.display = 'none';
+            submitButton.querySelector('.button-loader').style.display = 'inline';
+            resultArea.style.display = 'none';
+
+            const progressContainer = document.querySelector('.progress-container');
+            progressContainer.style.display = 'block';
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+
+            try {
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    const fileContent = event.target.result;
+
+                    const eventSource = new EventSource('/cross-reference-progress');
+                    eventSource.onmessage = function(event) {
+                        const progress = JSON.parse(event.data);
+                        progressBar.style.width = `${progress.percentage}%`;
+                        progressText.textContent = `Processing: ${Math.round(progress.percentage)}% (${progress.processed}/${progress.total} entries)`;
+                    };
+
+                    const response = await fetch('/cross-reference-lacerte', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + localStorage.getItem('authToken')
+                        },
+                        body: JSON.stringify({ fileContent })
+                    });
+
+                    eventSource.close();
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.success) {
+                            progressText.textContent = 'Processing complete!';
+                            progressBar.style.width = '100%';
+                            displayResults(data);
+                        } else {
+                            throw new Error(data.message || 'Failed to process file');
+                        }
+                    } else {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                };
+
+                reader.readAsText(file);
+
+            } catch (error) {
+                console.error('Error:', error);
+                progressText.textContent = 'Error: ' + error.message;
+                progressBar.style.width = '0%';
+                alert('Error processing file: ' + error.message);
+            } finally {
+                processingFile = false;
+                submitButton.disabled = false;
+                submitButton.querySelector('.button-text').style.display = 'inline';
+                submitButton.querySelector('.button-loader').style.display = 'none';
+            }
+        });
+
+        function displayResults(data) {
+
+            document.querySelector('.cross-reference-container form').closest('.cross-reference-container').style.display = 'none';
+
+            const resultArea = document.getElementById('resultArea');
+            resultArea.style.display = 'block';
+
+            document.getElementById('totalProcessed').textContent = data.totalProcessed;
+            document.getElementById('matchesFound').textContent = data.matchesFound;
+
+            window.allResults = [];
+            window.currentPage = 1;
+            window.entriesPerPage = 10;
+
+            if (!window.pendingFeedback) {
+                window.pendingFeedback = [];
+            }
+
+            fetch(data.resultsFile)
+                .then(response => response.text())
+                .then(csv => {
+                    const rows = csv.split('\n');
+
+                    for (let i = 1; i < rows.length; i++) {
+                        if (!rows[i].trim()) continue;
+                        window.allResults.push(rows[i]);
+                    }
+
+                    updateTable();
+                    setupPagination();
+
+                    const resultsContent = document.querySelector('.results-content');
+                    const downloadDiv = document.createElement('div');
+                    downloadDiv.className = 'buttons-container';
+                    downloadDiv.innerHTML = `
+    <button id="submitAllFeedback" class="submit-all-feedback"
+        ${window.pendingFeedback.length === 0 ? 'disabled' : ''}>
+        Submit All Feedback (${window.pendingFeedback.length} items)
+    </button>
+    <a href="${data.resultsFile}" download class="download-link">
+        Download Results
+    </a>
+    <button onclick="resetUploadForm()" class="download-link">
+        New Upload
+    </button>
+`;
+                    resultsContent.appendChild(downloadDiv);
+
+                    document.getElementById('submitAllFeedback').addEventListener('click', submitAllFeedback);
+                });
+        }
+
+        function getFeedbackCell(databaseMatch, confidenceNum, rowId, lacerteName) {
+            if (databaseMatch !== "No Match" && confidenceNum < 1.0 && confidenceNum >= 0.7) {
+                return `
+            <div class="feedback-buttons">
+                <button type="button" class="correct-match feedback-button"
+                    data-row-id="${rowId}"
+                    data-lacerte-name="${lacerteName}"
+                    data-database-match="${databaseMatch}"
+                    data-is-match="true">
+                    Correct Match
+                </button>
+                <button type="button" class="incorrect-match feedback-button"
+                    data-row-id="${rowId}"
+                    data-lacerte-name="${lacerteName}"
+                    data-database-match="${databaseMatch}"
+                    data-is-match="false">
+                    Incorrect Match
+                </button>
+            </div>
+        `;
+            } else {
+                if (confidenceNum === 1.0) return "Exact match";
+                if (databaseMatch === "No Match") return "No match found";
+                return "No feedback needed";
+            }
+        }
+
+        function updateTable() {
+            const tbody = document.getElementById('resultsTableBody');
+            tbody.innerHTML = '';
+
+            const hideExactMatches = document.getElementById('hideExactMatches').checked;
+
+            let filteredResults = [...window.allResults]; 
+            if (hideExactMatches) {
+                filteredResults = filteredResults.filter(row => {
+                    const [, , confidence] = row.split(',').map(cell => cell.replace(/"/g, ''));
+                    return parseFloat(confidence) !== 1.0;
+                });
+            }
+
+            const itemsPerPage = window.entriesPerPage === 'all' ? filteredResults.length : parseInt(window.entriesPerPage);
+            const maxPages = Math.ceil(filteredResults.length / itemsPerPage);
+            if (window.currentPage > maxPages) {
+                window.currentPage = 1;
+            }
+
+            const totalItems = filteredResults.length;
+            const totalPages = window.entriesPerPage === 'all' ? 1 : Math.ceil(totalItems / itemsPerPage);
+            const start = (window.currentPage - 1) * itemsPerPage;
+            const end = window.entriesPerPage === 'all' ? totalItems : Math.min(start + itemsPerPage, totalItems);
+
+            const pageResults = filteredResults.slice(start, end);
+
+            pageResults.forEach((row, index) => {
+                const [lacerteName, databaseMatch, confidence] = row
+                    .split(',')
+                    .map(cell => cell.replace(/"/g, ''));
+
+                const confidenceNum = parseFloat(confidence);
+                const tr = document.createElement('tr');
+                tr.id = `row-${start + index + 1}`;
+
+                tr.innerHTML = `
+            <td>${lacerteName}</td>
+            <td>${databaseMatch}</td>
+            <td>${confidence}</td>
+            <td>${getFeedbackCell(databaseMatch, confidenceNum, tr.id, lacerteName)}</td>
+        `;
+
+                tbody.appendChild(tr);
+            });
+
+            const pageInfo = document.getElementById('pageInfo');
+            pageInfo.innerHTML = `Page ${window.currentPage} of ${totalPages}`;
+
+            document.getElementById('prevPage').disabled = window.currentPage === 1;
+            document.getElementById('nextPage').disabled = window.currentPage === totalPages || totalPages === 0;
+
+            attachFeedbackListeners();
+        }
+
+        function setupPagination() {
+            document.getElementById('prevPage').addEventListener('click', () => {
+                if (window.currentPage > 1) {
+                    window.currentPage--;
+                    updateTable();
+                }
+            });
+
+            document.getElementById('nextPage').addEventListener('click', () => {
+                const hideExactMatches = document.getElementById('hideExactMatches').checked;
+                const filteredResults = hideExactMatches ?
+                    window.allResults.filter(row => {
+                        const [, , confidence] = row.split(',').map(cell => cell.replace(/"/g, ''));
+                        return parseFloat(confidence) !== 1.0;
+                    }) :
+                    window.allResults;
+
+                const totalPages = Math.ceil(filteredResults.length / (window.entriesPerPage === 'all' ? filteredResults.length : parseInt(window.entriesPerPage)));
+
+                if (window.currentPage < totalPages) {
+                    window.currentPage++;
+                    updateTable();
+                }
+            });
+
+            document.getElementById('entriesPerPage').addEventListener('change', (e) => {
+                window.entriesPerPage = e.target.value === 'all' ? 'all' : parseInt(e.target.value);
+                window.currentPage = 1;
+                updateTable();
+            });
+
+            document.getElementById('hideExactMatches').addEventListener('change', () => {
+                window.currentPage = 1;
+                updateTable();
+            });
+        }
+
+        function attachFeedbackListeners() {
+            document.querySelectorAll('.feedback-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    const rowId = this.dataset.rowId;
+                    const lacerteName = this.dataset.lacerteName;
+                    const databaseMatch = this.dataset.databaseMatch;
+                    const isMatch = this.dataset.isMatch === 'true';
+                    collectFeedback(rowId, lacerteName, databaseMatch, isMatch, this);
+                });
+            });
+        }
+
+        updateAIStats();
+        setInterval(updateAIStats, 30000);
+    });
+</script>
+</body>
+</html>

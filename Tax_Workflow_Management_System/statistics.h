@@ -67,6 +67,9 @@ namespace TaxReturnSystem {
         bool projectMatchesFilter(const Project& project, const StatsFilter& filter) const; // Check if project matches filter
         vector<Project> getFilteredProjects(const StatsFilter& filter) const; // Get filtered projects
         virtual unique_ptr<Statistics> clone() const = 0; // Virtual clone method
+
+        vector<Project> getAwaitingCorrectionsProjects(const StatsFilter& filter) const; // Get projects awaiting corrections
+        vector<Project> getAwaitingEFileAuthProjects(const StatsFilter& filter) const;   // Get projects awaiting e-file authorization
     };
 
     // Derived statistics classes

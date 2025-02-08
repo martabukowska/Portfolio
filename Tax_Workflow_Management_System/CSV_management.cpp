@@ -626,6 +626,119 @@ namespace TaxReturnSystem {
         }
     }
 
+    // Definition of a method to store feedback in database; takes names, match status, confidence and user ID as parameters; returns bool
+    bool ProjectsDatabase::storeFeedback(const string& lacerteName,
+                                       const string& databaseName,
+                                       bool isMatch,
+                                       double confidence,
+                                       int userId) {
+        try {
+            string query = "INSERT INTO lacerte_feedback "
+                          "(lacerte_name, database_name, is_match, confidence, user_id) VALUES "
+                          "('" + lacerteName + "', '" + databaseName + "', " +
+                          (isMatch ? "1" : "0") + ", " +
+                          to_string(confidence) + ", " +
+                          to_string(userId) + ");";
+
+            executeQuery(query);
+            return true;
+        } catch (const exception& e) {
+            return false;
+        }
+    }
+
+    // Definition of a method to get feedback history from database; takes limit as parameter; returns vector of FeedbackEntry
+    vector<FeedbackEntry> ProjectsDatabase::getFeedbackHistory(int limit) {
+        vector<FeedbackEntry> history;
+        string query = "SELECT lacerte_name, database_name, is_match, confidence, "
+                      "feedback_time, user_id FROM lacerte_feedback "
+                      "ORDER BY feedback_time DESC LIMIT " + to_string(limit);
+
+        sqlite3_stmt* stmt;
+        if (sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+            while (sqlite3_step(stmt) == SQLITE_ROW) {
+                FeedbackEntry entry;
+                entry.lacerte_name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+                entry.database_name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)));
+                entry.is_match = sqlite3_column_int(stmt, 2) != 0;
+                entry.confidence = sqlite3_column_double(stmt, 3);
+                entry.feedback_time = sqlite3_column_int64(stmt, 4);
+                entry.user_id = sqlite3_column_int(stmt, 5);
+                history.push_back(entry);
+            }
+            sqlite3_finalize(stmt);
+        }
+        return history;
+    }
+
+    // Definition of a method to export feedback to training file; takes filename as parameter; returns void
+    void ProjectsDatabase::exportFeedbackToTrainingFile(const string& filename) {
+        try {
+            cout << "\n=== Starting feedback export to " << filename << " ===" << endl;
+
+            // Store the original file content exactly as is
+            vector<string> originalLines;
+            ifstream existingFile(filename);
+            if (existingFile.is_open()) {
+                cout << "Reading original training data..." << endl;
+                string line;
+                while (getline(existingFile, line)) {
+                    originalLines.push_back(line);
+                    cout << "Preserved original line: " << line << endl;
+                }
+                existingFile.close();
+            }
+
+            // Get new feedback from database
+            cout << "Querying database for feedback..." << endl;
+            string query = "SELECT lacerte_name, database_name, is_match FROM lacerte_feedback";
+            sqlite3_stmt* stmt;
+
+            if (sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+                throw runtime_error("Failed to prepare SQL statement");
+            }
+
+            // Open file for writing
+            ofstream outFile(filename);
+            if (!outFile.is_open()) {
+                sqlite3_finalize(stmt);
+                throw runtime_error("Unable to open training file for writing");
+            }
+
+            // Write original content exactly as is
+            cout << "Writing original training data..." << endl;
+            for (const string& line : originalLines) {
+                outFile << line << "\n";
+            }
+
+            // Add new feedback data
+            cout << "Adding new feedback data..." << endl;
+            while (sqlite3_step(stmt) == SQLITE_ROW) {
+                string lacerte_name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+                string database_name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)));
+                bool is_match = sqlite3_column_int(stmt, 2) != 0;
+
+                // Skip empty entries
+                if (lacerte_name.empty() || database_name.empty()) {
+                    cout << "Skipping empty entry" << endl;
+                    continue;
+                }
+
+                outFile << lacerte_name << ","
+                        << database_name << ","
+                        << (is_match ? "1" : "-1") << "\n";
+                cout << "Added feedback: " << lacerte_name << ", " << database_name << endl;
+            }
+
+            sqlite3_finalize(stmt);
+            outFile.close();
+
+        } catch (const exception& e) {
+            cerr << "Error exporting feedback: " << e.what() << endl;
+            throw;
+        }
+    }
+
 // PROJECT MANAGER CLASS METHODS:
 
     // Definition of a method to import projects from a CSV file into database; takes a string and a ReportType as parameters; returns bool

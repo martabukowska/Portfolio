@@ -34,7 +34,7 @@ void addCorsHeaders(crow::response& res) {
     res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
-void setupRoutes(crow::SimpleApp& app, Auth& auth, ReminderSystem& reminderSystem, ProjectManager& projectManager) {
+void setupRoutes (crow::SimpleApp& app, Auth& auth, ReminderSystem& reminderSystem, ProjectManager& projectManager, LacerteCrossReference& lacerteCrossRef, ProjectsDatabase& projectsDatabase)  {
 
     // Definition of a route to handle CORS preflight OPTIONS requests; takes path parameter; returns 204 status
     CROW_ROUTE(app, "/<path>").methods("OPTIONS"_method)
@@ -920,4 +920,396 @@ void setupRoutes(crow::SimpleApp& app, Auth& auth, ReminderSystem& reminderSyste
                 return res;
             });
 
+    // Definition of a route to process Lacerte cross-reference; takes a request parameter with file content; returns JSON response with match metrics
+    CROW_ROUTE(app, "/cross-reference-lacerte").methods("POST"_method)
+    ([&auth, &projectManager, &lacerteCrossRef](const crow::request& req) {
+        crow::response res;
+        addCorsHeaders(res);
+
+        try {
+            cout << "\n=== Starting Lacerte Cross-Reference Process ===" << endl << flush;
+
+            // 1. Validate token
+            cout << "Validating authentication token..." << endl << flush;
+            string token = req.get_header_value("Authorization");
+            if (token.substr(0, 7) == "Bearer ") token = token.substr(7);
+            if (!auth.validateToken(token)) {
+                cout << "Authentication failed - invalid token" << endl << flush;
+                res.code = 401;
+                res.body = "Invalid token";
+                return res;
+            }
+            cout << "Authentication successful" << endl << flush;
+
+            // 2. Get projects and precompute features
+            cout << "Retrieving projects from database..." << endl << flush;
+            vector<Project> projects = projectManager.getAllProjects();
+            cout << "Retrieved " << projects.size() << " projects" << endl << flush;
+
+            cout << "Precomputing database features..." << endl << flush;
+            auto precomputedFeatures = lacerteCrossRef.precomputeDatabaseFeatures(projects);
+            cout << "Features precomputed for " << precomputedFeatures.size() << " entries" << endl << flush;
+
+            // 3. Parse uploaded file content
+            cout << "Parsing uploaded file content..." << endl << flush;
+            auto x = crow::json::load(req.body);
+            if (!x || !x.has("fileContent")) {
+                cout << "Error: Missing file content in request" << endl << flush;
+                res.code = 400;
+                res.body = "Missing file content";
+                return res;
+            }
+
+            // 4. Process CSV content
+            string fileContent = x["fileContent"].s();
+            istringstream stream(fileContent);
+            string line;
+
+            cout << "Beginning CSV processing..." << endl << flush;
+            vector<MatchResult> results;
+            int totalProcessed = 0;
+            int matchesFound = 0;
+
+            // Count total lines for progress calculation
+            int totalLines = count(fileContent.begin(), fileContent.end(), '\n') - 1; // Subtract 1 for header
+            cout << "Total lines to process: " << totalLines << endl << flush;
+
+            // Skip header line
+            getline(stream, line);
+
+            // 5. Process each line using precomputed features
+            while (getline(stream, line)) {
+                totalProcessed++;
+                if (totalProcessed % 50 == 0) {
+                    // Create progress JSON
+                    crow::json::wvalue progress;
+                    progress["processed"] = totalProcessed;
+                    progress["total"] = totalLines;
+                    progress["percentage"] = (totalProcessed * 100.0 / totalLines);
+
+                    cout << "Progress: " << totalProcessed << " entries processed ("
+                         << fixed << setprecision(1)
+                         << (totalProcessed * 100.0 / totalLines) << "%)" << endl << flush;
+                }
+
+                istringstream lineStream(line);
+                string lacerteName;
+                getline(lineStream, lacerteName, ',');
+
+                if (lacerteName.empty()) continue;
+
+                MatchResult currentMatch;
+                currentMatch.lacerteName = lacerteName;
+                currentMatch.confidence = 0.0;
+                currentMatch.databaseMatch = "";
+
+                // Track best match regardless of confidence threshold
+                string bestMatch = "";
+                double bestConfidence = 0.0;
+
+                // Compare against precomputed database entries
+                for (const auto& precomputed : precomputedFeatures) {
+                    double confidence = lacerteCrossRef.getMatchConfidence(lacerteName, precomputed.clientName);
+
+                    if (confidence > bestConfidence) {
+                        bestConfidence = confidence;
+                        bestMatch = precomputed.clientName;
+                    }
+                }
+
+                // Determine if it's a match based on threshold
+                if (bestConfidence > 0.7) {
+                    currentMatch.confidence = bestConfidence;
+                    currentMatch.databaseMatch = bestMatch;
+                    matchesFound++;
+                } else {
+                    currentMatch.confidence = bestConfidence;
+                    currentMatch.databaseMatch = "Closest: " + bestMatch;
+                }
+
+                results.push_back(currentMatch);
+            }
+
+            // 6. Write results to CSV
+            cout << "\nCSV processing completed:" << endl << flush;
+            cout << "Total entries processed: " << totalProcessed << endl << flush;
+            cout << "Matches found: " << matchesFound << endl << flush;
+            cout << "Writing results to CSV file..." << endl << flush;
+
+            ofstream outFile("cross_reference_results.csv");
+            outFile << "Lacerte Name,Database Match,Confidence Score,Notes\n";
+
+            for (const auto& match : results) {
+                outFile << "\"" << match.lacerteName << "\",";
+
+                if (match.confidence > 0.7) {
+                    outFile << "\"" << match.databaseMatch << "\",";
+                } else {
+                    outFile << "\"No Match\",";
+                }
+
+                outFile << fixed << setprecision(4) << match.confidence << ",";
+
+                if (match.confidence <= 0.7) {
+                    outFile << "\"Closest match: " << match.databaseMatch << "\"";
+                }
+
+                outFile << "\n";
+            }
+
+            outFile.close();
+            cout << "Results file written successfully" << endl << flush;
+
+            // 7. Prepare response with metrics
+            auto metrics = lacerteCrossRef.getModelMetrics();
+
+            crow::json::wvalue response;
+            response["success"] = true;
+            response["message"] = "Cross reference completed";
+            response["totalProcessed"] = totalProcessed;
+            response["matchesFound"] = matchesFound;
+            response["metrics"]["accuracy"] = metrics.getAccuracyRate();
+            response["metrics"]["matchRate"] = metrics.getMatchRate();
+            response["metrics"]["totalPredictions"] = metrics.totalPredictions;
+            response["metrics"]["correctMatches"] = metrics.correct_matches;
+            response["resultsFile"] = "cross_reference_results.csv";
+
+            res.code = 200;
+            res.body = response.dump();
+
+            cout << "=== Cross-Reference Process Completed Successfully ===\n" << endl;
+
+        } catch (const exception& e) {
+            cout << "ERROR: Cross-reference process failed: " << e.what() << endl << flush;
+            res.code = 500;
+            res.body = string("Error processing Lacerte file: ") + e.what();
+        }
+        return res;
+    });
+
+    // Definition of a route to stream cross-reference progress; takes a request parameter; returns server-sent event stream response
+    CROW_ROUTE(app, "/cross-reference-progress")
+            ([](const crow::request& req) {
+                crow::response res;
+                res.add_header("Content-Type", "text/event-stream");
+                res.add_header("Cache-Control", "no-cache");
+                res.add_header("Connection", "keep-alive");
+                return res;
+            });
+
+    // Definition of a route to complete feedback session and retrain model; takes a request parameter; returns JSON response with metrics
+    CROW_ROUTE(app, "/complete-feedback-session")
+            ([&lacerteCrossRef](const crow::request& req) {
+                try {
+
+                    // Force retrain without storing dummy data
+                    lacerteCrossRef.updateModelWithFeedback(
+                            "",     // empty name1
+                            "",     // empty name2
+                            true,   // dummy match
+                            1.0,    // dummy confidence
+                            true    // force retrain
+                    );
+
+                    auto metrics = lacerteCrossRef.getModelMetrics();
+
+                    crow::json::wvalue response;
+                    response["success"] = true;
+                    response["message"] = "Feedback session completed and model retrained";
+                    response["metrics"]["accuracy"] = metrics.accuracy;
+                    response["metrics"]["total_predictions"] = metrics.totalPredictions;
+                    response["metrics"]["correct_matches"] = metrics.correct_matches;
+
+                    return crow::response(200, response.dump());
+                } catch (const exception& e) {
+                    return crow::response(500, string("Error completing feedback session: ") + e.what());
+                }
+            });
+
+    // Definition of a route to serve cross-reference page; takes a request parameter; returns HTML response
+    CROW_ROUTE(app, "/cross-reference.html")([](const crow::request& req) {
+        crow::response res;
+        addCorsHeaders(res);
+        res.set_header("Content-Type", "text/html");
+
+        try {
+            std::ifstream file("templates/cross-reference.html");
+            if (!file.is_open()) {
+                res.code = 404;
+                res.body = "Cross Reference HTML file not found";
+                return res;
+            }
+
+            std::stringstream buffer;
+            buffer << file.rdbuf();
+            res.code = 200;
+            res.body = buffer.str();
+        } catch (const std::exception& e) {
+            res.code = 500;
+            res.body = std::string("Error reading cross-reference file: ") + e.what();
+        }
+
+        return res;
+    });
+
+    // Definition of a route to download cross-reference results; takes a request parameter; returns CSV file response
+    CROW_ROUTE(app, "/cross_reference_results.csv").methods("GET"_method)
+            ([](const crow::request& req) {
+                crow::response res;
+
+                // Read the CSV file
+                std::ifstream file("cross_reference_results.csv");
+                if (!file) {
+                    res.code = 404;
+                    res.body = "Results file not found";
+                    return res;
+                }
+
+                std::stringstream buffer;
+                buffer << file.rdbuf();
+
+                // Set appropriate headers
+                res.set_header("Content-Type", "text/csv");
+                res.set_header("Content-Disposition", "attachment; filename=cross_reference_results.csv");
+                res.body = buffer.str();
+
+                return res;
+            });
+
+    // Definition of a route to handle model feedback; takes a request parameter with match data; returns JSON response
+    CROW_ROUTE(app, "/api/feedback").methods("POST"_method)
+            ([&lacerteCrossRef](const crow::request& req) {
+                auto body = crow::json::load(req.body);
+
+                // Validate JSON body
+                if (!body ||
+                    !body.has("name1") ||
+                    !body.has("name2") ||
+                    !body.has("isMatch")) {
+                    return crow::response(400, crow::json::wvalue({
+                                                                          {"success", false},
+                                                                          {"message", "Invalid request body"}
+                                                                  }));
+                }
+
+                try {
+                    string name1 = body["name1"].s();
+                    string name2 = body["name2"].s();
+                    bool isMatch = body["isMatch"].b();
+                    double confidence = lacerteCrossRef.getMatchConfidence(name1, name2);
+
+                    lacerteCrossRef.updateModelWithFeedback(name1, name2, isMatch, confidence);
+
+                    return crow::response(200, crow::json::wvalue({
+                                                                          {"success", true},
+                                                                          {"message", "Feedback recorded successfully"}
+                                                                  }));
+                } catch (const exception& e) {
+                    return crow::response(500, crow::json::wvalue({
+                                                                          {"success", false},
+                                                                          {"message", e.what()}
+                                                                  }));
+                }
+            });
+
+    CROW_ROUTE(app, "/model-stats")
+            ([&auth, &lacerteCrossRef](const crow::request& req) {
+                crow::response res;
+                addCorsHeaders(res);
+
+                try {
+                    // Validate token
+                    string token = req.get_header_value("Authorization");
+                    if (token.substr(0, 7) == "Bearer ") token = token.substr(7);
+                    if (!auth.validateToken(token)) {
+                        res.code = 401;
+                        res.body = "Invalid token";
+                        return res;
+                    }
+
+                    auto metrics = lacerteCrossRef.getModelMetrics();
+
+                    // Calculate batch accuracy (for current upload)
+                    double batchAccuracy = metrics.matches_found > 0 ?
+                                           (double)(metrics.matches_found + metrics.correct_matches) /
+                                           (metrics.matches_found + metrics.total_high_confidence) : 0.0;
+
+                    // Add debug output
+
+                    crow::json::wvalue response{
+                        {"accuracy", metrics.accuracy},
+                        {"batchAccuracy", batchAccuracy},  // Add batch accuracy
+                        {"totalMatches", metrics.matches_found},
+                        {"learningProgress", metrics.totalPredictions},
+                        {"correctMatches", metrics.correct_matches}
+                    };
+
+                    res.code = 200;
+                    res.body = response.dump();
+                    return res;
+
+                } catch (const exception& e) {
+                    res.code = 500;
+                    res.body = string("Error getting model stats: ") + e.what();
+                    return res;
+                }
+            });
+
+    CROW_ROUTE(app, "/statistics/awaiting-efile-auth").methods("GET"_method)
+            ([&auth, &projectManager](const crow::request& req) {
+                crow::response res;
+                addCorsHeaders(res);
+
+                try {
+                    // Validate token
+                    string token = req.get_header_value("Authorization");
+                    if (token.substr(0, 7) == "Bearer ") {
+                        token = token.substr(7);
+                    }
+                    if (!auth.validateToken(token)) {
+                        res.code = 401;
+                        res.body = "Invalid token";
+                        return res;
+                    }
+
+                    // Get filter parameters from query string
+                    string manager = req.url_params.get("manager") ? req.url_params.get("manager") : "";
+                    string group = req.url_params.get("group") ? req.url_params.get("group") : "";
+                    string projectType = req.url_params.get("projectType") ? req.url_params.get("projectType") : "";
+
+                    // Get all projects and filter them
+                    vector<Project> projects = projectManager.getAllProjects();
+                    vector<crow::json::wvalue> awaitingEFileAuth;
+
+                    for (const auto& project : projects) {
+                        // Apply filters
+                        if ((!manager.empty() && project.getManager() != manager) ||
+                            (!group.empty() && project.getGroup() != group) ||
+                            (!projectType.empty() && project.getProjectType() != projectType)) {
+                            continue;
+                        }
+
+                        // Check if project is awaiting e-file authorization
+                        if (project.getNextTask() == "E-file Sent to Client") {
+                            crow::json::wvalue projectJson;
+                            projectJson["id"] = project.getId();
+                            projectJson["client"] = project.getClient();
+                            projectJson["manager"] = project.getManager();
+                            projectJson["deadline"] = project.getRegularDeadline().getDateStr();
+                            projectJson["projectType"] = project.getProjectType();
+                            awaitingEFileAuth.push_back(std::move(projectJson));
+                        }
+                    }
+
+                    res.code = 200;
+                    res.body = crow::json::wvalue(awaitingEFileAuth).dump();
+                    res.add_header("Content-Type", "application/json");
+
+                } catch (const std::exception& e) {
+                    res.code = 500;
+                    res.body = std::string("Error retrieving awaiting e-file auth: ") + e.what();
+                }
+
+                return res;
+            });                        
 }

@@ -19,6 +19,16 @@ using namespace std;
 
 namespace TaxReturnSystem {
 
+    // Stores feedback data for name matching between Lacerte and database systems
+    struct FeedbackEntry {
+        string lacerte_name;     // Name from Lacerte system
+        string database_name;    // Name from database system
+        bool is_match;          // Whether the names are a match
+        double confidence;      // Confidence score of the match
+        time_t feedback_time;   // Time when feedback was recorded
+        int user_id;           // ID of user providing feedback
+    };
+
     // Represents a date stored in YYYYMMDD format
     class Date {
     private:
@@ -38,6 +48,117 @@ namespace TaxReturnSystem {
         bool operator<(const Date& rhs) const { return dateValue < rhs.dateValue; }
         bool operator>(const Date& rhs) const { return dateValue > rhs.dateValue; }
         bool operator==(const Date& rhs) const { return dateValue == rhs.dateValue; }
+
+         bool storeFeedback(const string& lacerteName,
+                           const string& databaseName,
+                           bool isMatch,
+                           double confidence,
+                           int userId = -1) {
+            try {
+                string query = "INSERT INTO lacerte_feedback "
+                               "(lacerte_name, database_name, is_match, confidence, user_id) VALUES "
+                               "('" + lacerteName + "', '" + databaseName + "', " +
+                               (isMatch ? "1" : "0") + ", " +
+                               to_string(confidence) + ", " +
+                               to_string(userId) + ");";
+
+                executeQuery(query);
+                return true;
+            } catch (const exception& e) {
+                return false;
+            }
+        }
+
+        vector<FeedbackEntry> getFeedbackHistory(int limit = 100) {
+            vector<FeedbackEntry> history;
+            string query = "SELECT lacerte_name, database_name, is_match, confidence, "
+                           "feedback_time, user_id FROM lacerte_feedback "
+                           "ORDER BY feedback_time DESC LIMIT " + to_string(limit);
+
+            sqlite3_stmt* stmt;
+            if (sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+                while (sqlite3_step(stmt) == SQLITE_ROW) {
+                    FeedbackEntry entry;
+                    entry.lacerte_name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+                    entry.database_name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)));
+                    entry.is_match = sqlite3_column_int(stmt, 2) != 0;
+                    entry.confidence = sqlite3_column_double(stmt, 3);
+                    entry.feedback_time = sqlite3_column_int64(stmt, 4);
+                    entry.user_id = sqlite3_column_int(stmt, 5);
+                    history.push_back(entry);
+                }
+                sqlite3_finalize(stmt);
+            }
+            return history;
+        }
+
+        void exportFeedbackToTrainingFile(const string& filename) {
+            try {
+                cout << "\n=== Starting feedback export to " << filename << " ===" << endl;
+
+                // Store the original file content exactly as is
+                vector<string> originalLines;
+                ifstream existingFile(filename);
+                if (existingFile.is_open()) {
+                    cout << "Reading original training data..." << endl;
+                    string line;
+                    while (getline(existingFile, line)) {
+                        originalLines.push_back(line);
+                        cout << "Preserved original line: " << line << endl;
+                    }
+                    existingFile.close();
+                }
+
+                // Get new feedback from database
+                cout << "Querying database for feedback..." << endl;
+                string query = "SELECT lacerte_name, database_name, is_match FROM lacerte_feedback";
+                sqlite3_stmt* stmt;
+
+                if (sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+                    throw runtime_error("Failed to prepare SQL statement");
+                }
+
+                // Open file for writing
+                ofstream outFile(filename);
+                if (!outFile.is_open()) {
+                    sqlite3_finalize(stmt);
+                    throw runtime_error("Unable to open training file for writing");
+                }
+
+                // Write original content exactly as is
+                cout << "Writing original training data..." << endl;
+                for (const string& line : originalLines) {
+                    outFile << line << "\n";
+                }
+
+                // Add new feedback data
+                cout << "Adding new feedback data..." << endl;
+                while (sqlite3_step(stmt) == SQLITE_ROW) {
+                    string lacerte_name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+                    string database_name = string(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1)));
+                    bool is_match = sqlite3_column_int(stmt, 2) != 0;
+
+                    // Skip empty entries
+                    if (lacerte_name.empty() || database_name.empty()) {
+                        cout << "Skipping empty entry" << endl;
+                        continue;
+                    }
+
+                    outFile << lacerte_name << ","
+                            << database_name << ","
+                            << (is_match ? "1" : "-1") << "\n";
+                    cout << "Added feedback: " << lacerte_name << ", " << database_name << endl;
+                }
+
+                sqlite3_finalize(stmt);
+                outFile.close();
+
+            } catch (const exception& e) {
+                cerr << "Error exporting feedback: " << e.what() << endl;
+                throw;
+            }
+        }
+        
     };
 
     // Enum for report types
@@ -163,6 +284,19 @@ namespace TaxReturnSystem {
         bool rollbackTransaction();
 
         static void updateColumnMappingsFromCSVHeader(const string& headerLine);
+
+        // Store feedback data in database
+        bool storeFeedback(const string& lacerteName,
+                          const string& databaseName,
+                          bool isMatch,
+                          double confidence,
+                          int userId = -1);
+
+        // Retrieve recent feedback entries
+        vector<FeedbackEntry> getFeedbackHistory(int limit = 100);
+
+        // Export feedback data to training file
+        void exportFeedbackToTrainingFile(const string& filename);
     };
 
     // Struct for filter criteria

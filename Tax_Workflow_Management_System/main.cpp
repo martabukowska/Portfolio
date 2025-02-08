@@ -27,6 +27,7 @@
 #include "config.h"
 #include <inja/inja.hpp>
 #include <nlohmann/json.hpp>
+#include "Lacerte_cross_ref.h"
 
 using namespace std;
 
@@ -84,12 +85,23 @@ int main() {
         globalCsvData = make_shared<Project>();
         cout << "Global CSV Data initialized successfully." << endl;
 
+        cout << "Initializing LacerteCrossReference..." << endl;
+        LacerteCrossReference lacerteCrossRef(projectsDatabase);
+        try {
+            lacerteCrossRef.loadTrainingData("training_data.csv");
+            lacerteCrossRef.trainModel();
+            cout << "LacerteCrossReference model trained successfully." << endl;
+        } catch (const exception& e) {
+            cerr << "Error training LacerteCrossReference model: " << e.what() << endl;
+            return 1;
+        }
+
         cout << "Initializing ReminderSystem..." << endl;
         ReminderSystem reminderSystem;
         cout << "ReminderSystem initialized successfully." << endl;
 
         cout << "Setting up routes..." << endl;
-        setupRoutes(app, auth, reminderSystem, projectManager);
+        setupRoutes(app, auth, reminderSystem, projectManager, lacerteCrossRef, projectsDatabase);
         cout << "Routes set up successfully." << endl;
 
         // Run the app on localhost port 8080

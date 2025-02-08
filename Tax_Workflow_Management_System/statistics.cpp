@@ -380,4 +380,71 @@ namespace TaxReturnSystem {
         }
     }
 
+    // Definition of a method to get projects awaiting corrections; takes StatsFilter as parameter; returns vector of Projects
+    vector<Project> Statistics::getAwaitingCorrectionsProjects(const StatsFilter& filter) const {
+        vector<Project> result;
+        for (const auto& project : getFilteredProjects(filter)) {
+            // Check if project is awaiting corrections
+            if (project.getNextTask() == "Corrections Cleared") {
+                // Check if all dependencies are met
+                bool dependenciesMet = true;
+                for (const auto& [dependencyId, dependencyType] : project.getDependencies()) {
+                    Project dependencyProject;
+                    if (database->getProjectFromDatabase(dependencyId, dependencyProject)) {
+                        if (!project.isDependencyMet(dependencyId, dependencyProject.getNextTask())) {
+                            dependenciesMet = false;
+                            break;
+                        }
+                    } else {
+                        dependenciesMet = false;
+                        break;
+                    }
+                }
+
+                // Only include project if dependencies are met
+                if (dependenciesMet) {
+                    result.push_back(project);
+                }
+            }
+        }
+        return result;
+    }
+
+    // Definition of a method to get projects awaiting e-file authorization; takes StatsFilter as parameter; returns vector of Projects
+    vector<Project> Statistics::getAwaitingEFileAuthProjects(const StatsFilter& filter) const {
+        vector<Project> result;
+        for (const auto& project : getFilteredProjects(filter)) {
+            // Check if project is awaiting e-file authorization
+            if (project.getNextTask() == "E-file Sent to Client") {  // Removed "E-file Authorization Pending" check
+                // Skip dependency check if there are no dependencies
+                if (project.getDependencies().empty()) {
+                    result.push_back(project);
+                    continue;
+                }
+
+                // Check if all dependencies are met
+                bool dependenciesMet = true;
+                for (const auto& [dependencyId, dependencyType] : project.getDependencies()) {
+                    Project dependencyProject;
+                    if (database->getProjectFromDatabase(dependencyId, dependencyProject)) {
+                        if (!project.isDependencyMet(dependencyId, dependencyProject.getNextTask())) {
+                            dependenciesMet = false;
+                            break;
+                        }
+                    } else {
+                        // Only mark dependencies as not met if the dependency exists but isn't met
+                        // Missing dependencies might be okay in some cases
+                        continue;
+                    }
+                }
+
+                // Only include project if dependencies are met or if there was an issue checking them
+                if (dependenciesMet) {
+                    result.push_back(project);
+                }
+            }
+        }
+        return result;
+    }
+
 }
