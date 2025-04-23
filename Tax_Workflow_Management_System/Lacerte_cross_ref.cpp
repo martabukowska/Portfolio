@@ -14,6 +14,8 @@
 #include <cctype>
 #include <regex>
 #include "config.h"
+#include <thread>
+#include <atomic>
 
 using namespace std;
 
@@ -66,64 +68,36 @@ namespace TaxReturnSystem {
 
     // Definition of method to preprocess a name; takes name string parameter; returns processed string
     string LacerteCrossReference::preprocessName(const string& name) {
-        string processed = name;
-
-        // Business abbreviations to normalize
-        const vector<pair<string, string>> businessAbbreviations = {
-                {"llc", ""},
-                {"ltd", ""},
-                {"inc", ""},
-                {"corp", ""},
-                {"corporation", ""},
-                {"incorporated", ""},
-                {"limited", ""},
-                {"company", ""},
-                {"co", ""},
-                {"lp", ""},
-                {"llp", ""},
-                {"l.l.c.", ""},
-                {"l.t.d.", ""},
-                {"l.p.", ""},
-                {"l.l.p.", ""}
+        static const unordered_map<string, string> businessAbbrs = {
+                {"llc", ""}, {"ltd", ""}, {"inc", ""}, {"corp", ""},
+                {"corporation", ""}, {"incorporated", ""}, {"limited", ""},
+                {"company", ""}, {"co", ""}, {"lp", ""}, {"llp", ""},
+                {"l.l.c.", ""}, {"l.t.d.", ""}, {"l.p.", ""}, {"l.l.p.", ""}
         };
 
-        // 1. Convert to lowercase
-        transform(processed.begin(), processed.end(), processed.begin(), ::tolower);
+        string processed;
+        processed.reserve(name.length());
 
-        // Store original business suffix for later comparison
-        string originalSuffix;
-        for (const auto& abbr : businessAbbreviations) {
-            size_t pos = processed.find(abbr.first);
-            if (pos != string::npos) {
-                originalSuffix = processed.substr(pos);
-                break;
-            }
-        }
+        transform(name.begin(), name.end(), back_inserter(processed),
+                  [](unsigned char c) { return tolower(c); });
 
-        // 2. Remove business abbreviations for main comparison
-        for (const auto& abbr : businessAbbreviations) {
+        static const regex cleanup_pattern("[.,;:'\"\\-_\\s]+");
+        processed = regex_replace(processed, cleanup_pattern, " ");
+
+        for (const auto& [abbr, _] : businessAbbrs) {
             size_t pos;
-            while ((pos = processed.find(abbr.first)) != string::npos) {
-                processed.replace(pos, abbr.first.length(), "");
+            while ((pos = processed.find(abbr)) != string::npos) {
+                processed.erase(pos, abbr.length());
             }
         }
 
-        // 3. Replace special characters with their word equivalents
-        for (const auto& term : equivalentTerms) {
-            size_t pos;
-            while ((pos = processed.find(term.first)) != string::npos) {
-                processed.replace(pos, term.first.length(), term.second[0]);
+        if (!processed.empty()) {
+            size_t start = processed.find_first_not_of(" ");
+            size_t end = processed.find_last_not_of(" ");
+            if (start != string::npos && end != string::npos) {
+                processed = processed.substr(start, end - start + 1);
             }
         }
-
-        // 4. Remove remaining punctuation and special characters
-        processed = regex_replace(processed, regex("[.,;:'\"\\-_]"), "");
-
-        // 5. Normalize spaces (multiple spaces to single space)
-        processed = regex_replace(processed, regex("\\s+"), " ");
-
-        // 6. Trim leading/trailing spaces
-        processed = regex_replace(processed, regex("^\\s+|\\s+$"), "");
 
         return processed;
     }
@@ -182,28 +156,23 @@ namespace TaxReturnSystem {
     }
 
     // Definition of method to calculate token overlap; takes two name strings as parameters; returns overlap score as double
-    double LacerteCrossReference::tokenOverlap(const string& name1, const string& name2) {
-        // Tokenize and sort both names
-        auto tokens1 = tokenizeAndSort(preprocessName(name1));
-        auto tokens2 = tokenizeAndSort(preprocessName(name2));
-
-        // Convert to sets for unique tokens
-        set<string> set1(tokens1.begin(), tokens1.end());
-        set<string> set2(tokens2.begin(), tokens2.end());
-
-        // Count matching tokens, including equivalent terms
+    double LacerteCrossReference::tokenOverlap(const PrecomputedFeatures& features1, const PrecomputedFeatures& features2) {
         int matchCount = 0;
-        for (const auto& token1 : set1) {
-            for (const auto& token2 : set2) {
-                if (areTokensEquivalent(token1, token2)) { 
-                    matchCount++;
-                    break;  // Move to next token1 once we find a match
-                }
+
+        const auto& smaller = features1.tokenSet.size() < features2.tokenSet.size() ?
+                              features1.tokenSet : features2.tokenSet;
+        const auto& larger = features1.tokenSet.size() < features2.tokenSet.size() ?
+                             features2.tokenSet : features1.tokenSet;
+
+        for (const auto& token : smaller) {
+            if (larger.count(token) ||
+                any_of(larger.begin(), larger.end(),
+                       [&](const string& t) { return areTokensEquivalent(token, t); })) {
+                matchCount++;
             }
         }
 
-        // Calculate Jaccard similarity with equivalent terms considered
-        int unionSize = set1.size() + set2.size() - matchCount;
+        int unionSize = features1.tokenSet.size() + features2.tokenSet.size() - matchCount;
         return unionSize > 0 ? static_cast<double>(matchCount) / unionSize : 0.0;
     }
 
@@ -222,11 +191,9 @@ namespace TaxReturnSystem {
                 pair.system2_name = row[1];
 
                 try {
-                    // Handle both 1/-1 and 1/0 format in training data
                     int label = std::stoi(row[2]);
 
-                    // Convert any negative number to false, any positive to true
-                    pair.is_match = (label > 0);  // Store as boolean in memory
+                    pair.is_match = (label > 0);
 
                     if (pair.is_match) {
                         positiveCount++;
@@ -235,7 +202,6 @@ namespace TaxReturnSystem {
                     }
 
                 } catch (const std::exception& e) {
-                    // Skip invalid rows 
                     continue;
                 }
 
@@ -243,7 +209,6 @@ namespace TaxReturnSystem {
             }
         }
 
-        // If no data was loaded, throw an exception
         if (training_data.empty()) {
             throw runtime_error("No valid training data loaded from " + filename);
         }
@@ -286,15 +251,27 @@ namespace TaxReturnSystem {
         vector<double> labels;
 
         for (const auto& pair : training_data) {
-            auto features1 = nameToFeatures(pair.system1_name);
-            auto features2 = nameToFeatures(pair.system2_name);
+            // Create PrecomputedFeatures for both names
+            PrecomputedFeatures features1;
+            features1.clientName = pair.system1_name;
+            features1.processedName = preprocessName(pair.system1_name);
+            features1.tokens = tokenizeAndSort(features1.processedName);
+            features1.tokenSet = unordered_set<string>(features1.tokens.begin(), features1.tokens.end());
+            features1.features = nameToFeatures(features1.processedName);
+
+            PrecomputedFeatures features2;
+            features2.clientName = pair.system2_name;
+            features2.processedName = preprocessName(pair.system2_name);
+            features2.tokens = tokenizeAndSort(features2.processedName);
+            features2.tokenSet = unordered_set<string>(features2.tokens.begin(), features2.tokens.end());
+            features2.features = nameToFeatures(features2.processedName);
 
             // Set token overlap for this specific pair
-            double overlap = tokenOverlap(pair.system1_name, pair.system2_name);
-            features1(3) = overlap;
-            features2(3) = overlap;
+            double overlap = tokenOverlap(features1, features2);
+            features1.features(3) = overlap;
+            features2.features(3) = overlap;
 
-            auto combined = concatenateFeatures(features1, features2);
+            auto combined = concatenateFeatures(features1.features, features2.features);
             samples.push_back(combined);
             labels.push_back(pair.is_match ? 1.0 : -1.0);
         }
@@ -308,44 +285,47 @@ namespace TaxReturnSystem {
 
     // Definition of method to get match confidence; takes two name strings as parameters; returns confidence score as double
     double LacerteCrossReference::getMatchConfidence(const string& name1, const string& name2) {
-        // Input validation
-        if (name1.empty() || name2.empty()) {
+        // Create PrecomputedFeatures from strings
+        PrecomputedFeatures features1;
+        features1.clientName = name1;
+        features1.processedName = preprocessName(name1);
+        features1.tokens = tokenizeAndSort(features1.processedName);
+        features1.tokenSet = unordered_set<string>(features1.tokens.begin(), features1.tokens.end());
+        features1.features = nameToFeatures(features1.processedName);
+
+        PrecomputedFeatures features2;
+        features2.clientName = name2;
+        features2.processedName = preprocessName(name2);
+        features2.tokens = tokenizeAndSort(features2.processedName);
+        features2.tokenSet = unordered_set<string>(features2.tokens.begin(), features2.tokens.end());
+        features2.features = nameToFeatures(features2.processedName);
+
+        return getMatchConfidence(features1, features2);
+    }
+
+    double LacerteCrossReference::getMatchConfidence(const PrecomputedFeatures& features1,const PrecomputedFeatures& features2) {
+        // Early exit for exact matches
+        if (features1.processedName == features2.processedName) {
+            return 1.0;
+        }
+
+        // Early exit for empty processed names
+        if (features1.processedName.empty() || features2.processedName.empty()) {
             return 0.0;
         }
 
-        try {
-            // Preprocess both names
-            string processed1 = preprocessName(name1);
-            string processed2 = preprocessName(name2);
+        // Set token overlap for this specific comparison
+        double overlap = tokenOverlap(features1, features2);
+        auto f1 = features1.features;
+        auto f2 = features2.features;
+        f1(3) = overlap;
+        f2(3) = overlap;
 
-            // Early exit for exact matches after preprocessing
-            if (processed1 == processed2) {
-                return 1.0;
-            }
+        auto combined = concatenateFeatures(f1, f2);
+        double raw_score = matcher_model(combined);
 
-            // Early exit for empty processed names
-            if (processed1.empty() || processed2.empty()) {
-                return 0.0;
-            }
-
-            // Get features for processed names
-            auto features1 = nameToFeatures(processed1);
-            auto features2 = nameToFeatures(processed2);
-
-            // Set token overlap for this specific comparison
-            double overlap = tokenOverlap(processed1, processed2);
-            features1(3) = overlap;
-            features2(3) = overlap;
-
-            auto combined = concatenateFeatures(features1, features2);
-            double raw_score = matcher_model(combined);
-
-            // Convert to probability using sigmoid
-            return 1.0 / (1.0 + std::exp(-raw_score));
-        } catch (const exception& e) {
-            // If any error occurs during processing, return 0 confidence
-            return 0.0;
-        }
+        // Convert to probability using sigmoid
+        return 1.0 / (1.0 + std::exp(-raw_score));
     }
 
     // Definition of method to concatenate features; takes two feature vectors as parameters; returns combined feature vector
@@ -409,18 +389,18 @@ namespace TaxReturnSystem {
 
                     // Count high confidence predictions for accuracy calculation
                     if (predictedConfidence > 0.7) {  // Count all high confidence predictions
-                        metrics.total_high_confidence++;  // Track total high confidence predictions
+                        metrics.totalHighConfidence++;  // Track total high confidence predictions
                     }
 
                     // Update match statistics - only count as match if it was correct
                     if (predictedConfidence > 0.7 && isCorrectMatch) {
-                        metrics.matches_found++;
-                        metrics.correct_matches++;
+                        metrics.matchesFound++;
+                        metrics.correctMatches++;
                     }
 
                     // Calculate accuracy after updating all counters
-                    metrics.accuracy = metrics.total_high_confidence > 0 ? 
-                        (double)metrics.correct_matches / metrics.total_high_confidence : 0.0;
+                    metrics.accuracy = metrics.totalHighConfidence > 0 ?
+                                       (double)metrics.correctMatches / metrics.totalHighConfidence : 0.0;
                 }
 
                 // Track mismatches for retraining (include all feedback)
@@ -498,6 +478,174 @@ namespace TaxReturnSystem {
         }
 
         return precomputed;
+    }
+
+    vector<MatchResult> LacerteCrossReference::findMatches(
+            const vector<string>& lacerteNames,
+            const vector<PrecomputedFeatures>& precomputed) {
+
+        vector<MatchResult> results(lacerteNames.size());
+        mutex cout_mutex;
+        const double EARLY_EXIT_THRESHOLD = 0.95;
+
+        // Create length-based buckets
+        unordered_map<size_t, vector<size_t>> lengthBuckets;
+        for (size_t idx = 0; idx < precomputed.size(); idx++) {
+            size_t lengthBucket = precomputed[idx].clientName.length() / 5; // Group in ranges of 5
+            lengthBuckets[lengthBucket].push_back(idx);
+        }
+
+        const size_t num_threads = thread::hardware_concurrency();
+        vector<thread> threads;
+        const size_t lacerte_chunk_size = max(size_t(1), lacerteNames.size() / num_threads);
+
+        vector<atomic<size_t>> thread_progress(num_threads);
+        vector<atomic<size_t>> early_exits(num_threads);
+        vector<atomic<size_t>> comparisons_saved(num_threads);
+
+        for (size_t t = 0; t < num_threads; ++t) {
+            const size_t lacerte_start = t * lacerte_chunk_size;
+            const size_t lacerte_end = (t == num_threads - 1) ?
+                                       lacerteNames.size() : min((t + 1) * lacerte_chunk_size, lacerteNames.size());
+
+            if (lacerte_start >= lacerte_end) continue;
+
+            threads.emplace_back([&, t, lacerte_start, lacerte_end]() {
+                size_t local_early_exits = 0;
+                size_t local_comparisons = 0;
+                size_t total_possible_comparisons = 0;
+
+                for (size_t i = lacerte_start; i < lacerte_end; ++i) {
+                    const string& lacerteName = lacerteNames[i];
+                    double bestConfidence = 0.0;
+                    string bestMatch;
+
+                    // Get candidates from length buckets
+                    set<size_t> candidateIndices;
+                    size_t currentBucket = lacerteName.length() / 5;
+
+                    // Check current bucket and adjacent buckets
+                    for (int bucketOffset = -1; bucketOffset <= 1; bucketOffset++) {
+                        size_t bucket = currentBucket + bucketOffset;
+                        if (lengthBuckets.find(bucket) != lengthBuckets.end()) {
+                            const auto& indices = lengthBuckets[bucket];
+                            candidateIndices.insert(indices.begin(), indices.end());
+                        }
+                    }
+
+                    total_possible_comparisons += precomputed.size();
+                    local_comparisons += candidateIndices.size();
+
+                    // Compare with candidates
+                    for (size_t idx : candidateIndices) {
+                        if (idx >= precomputed.size()) continue; // Safety check
+
+                        double confidence = getMatchConfidence(lacerteName, precomputed[idx].clientName);
+                        if (confidence > bestConfidence) {
+                            bestConfidence = confidence;
+                            bestMatch = precomputed[idx].clientName;
+
+                            if (confidence >= EARLY_EXIT_THRESHOLD) {
+                                local_early_exits++;
+                                break;
+                            }
+                        }
+                    }
+
+                    results[i] = {lacerteName, bestMatch, bestConfidence};
+                    thread_progress[t]++;
+
+                    // Progress reporting
+                    size_t report_interval = min(size_t(10), max(size_t(1), (lacerte_end - lacerte_start) / 20));
+                    if (thread_progress[t] % report_interval == 0) {
+                        lock_guard<mutex> lock(cout_mutex);
+                        double progress = (100.0 * thread_progress[t]) / (lacerte_end - lacerte_start);
+                        double comparison_reduction = 100.0 * (1.0 - (double)local_comparisons / total_possible_comparisons);
+                        cout << "Thread " << t << ": "
+                             << thread_progress[t] << "/" << (lacerte_end - lacerte_start)
+                             << " (" << fixed << setprecision(1) << progress << "%) "
+                             << "Comparisons reduced by " << comparison_reduction << "%" << endl;
+                    }
+                }
+
+                early_exits[t] = local_early_exits;
+                comparisons_saved[t] = total_possible_comparisons - local_comparisons;
+
+                {
+                    lock_guard<mutex> lock(cout_mutex);
+                    double comparison_reduction = 100.0 * (1.0 - (double)local_comparisons / total_possible_comparisons);
+                    cout << "Thread " << t << " completed. "
+                         << thread_progress[t] << " names processed, "
+                         << local_early_exits << " early exits, "
+                         << "comparisons reduced by " << comparison_reduction << "%" << endl;
+                }
+            });
+        }
+
+        for (auto& t : threads) {
+            if (t.joinable()) t.join();
+        }
+
+        // Final summary
+        cout << "\nAll threads completed. Summary:" << endl;
+        size_t total_processed = 0;
+        size_t total_early_exits = 0;
+        size_t total_comparisons_saved = 0;
+        size_t total_possible = 0;
+
+        for (size_t t = 0; t < num_threads; ++t) {
+            total_processed += thread_progress[t];
+            total_early_exits += early_exits[t];
+            total_comparisons_saved += comparisons_saved[t];
+            total_possible += thread_progress[t] * precomputed.size();
+        }
+
+        double overall_reduction = 100.0 * (double)total_comparisons_saved / total_possible;
+        cout << "\nTotal processed: " << total_processed << "/" << lacerteNames.size() << endl;
+        cout << "Total early exits: " << total_early_exits
+             << " (" << (100.0 * total_early_exits / total_processed) << "%)" << endl;
+        cout << "Overall comparison reduction: " << overall_reduction << "%" << endl;
+
+        return results;
+    }
+
+    // Definition of method to test database access; takes no parameters; returns boolean indicating success
+    bool LacerteCrossReference::testDatabaseAccess() {
+        try {
+            string testName1 = "Test Company ABC";
+            string testName2 = "Test Company XYZ";
+            bool isMatch = true;
+            double confidence = 0.85;
+
+            return database.storeFeedback(testName1, testName2, isMatch, confidence);
+        } catch (const exception& e) {
+            cout << "Database access error: " << e.what() << endl;
+            return false;
+        }
+    }
+
+    // Definition of method to benchmark precompute performance; takes vector of projects parameter; returns void
+    void LacerteCrossReference::benchmarkPrecompute(const vector<Project>& projects) {
+        cout << "\n=== Running Precompute Benchmark ===" << endl;
+
+        auto startTime = chrono::high_resolution_clock::now();
+
+        cout << "Starting precomputation for " << projects.size() << " projects..." << endl;
+        auto precomputed = precomputeDatabaseFeatures(projects);
+
+        auto endTime = chrono::high_resolution_clock::now();
+        auto duration = chrono::duration_cast<chrono::milliseconds>(endTime - startTime);
+
+        double timeSeconds = duration.count() / 1000.0;
+        double itemsPerSecond = projects.size() / timeSeconds;
+
+        cout << "\nBenchmark Results:" << endl;
+        cout << "--------------------------------" << endl;
+        cout << "Total time: " << timeSeconds << " seconds" << endl;
+        cout << "Items processed: " << projects.size() << endl;
+        cout << "Processing speed: " << itemsPerSecond << " items/second" << endl;
+        cout << "Threads used: " << thread::hardware_concurrency() - 1 << endl;
+        cout << "--------------------------------" << endl;
     }
 
 } // namespace TaxReturnSystem
