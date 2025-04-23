@@ -485,103 +485,173 @@ namespace TaxReturnSystem {
             const vector<PrecomputedFeatures>& precomputed) {
 
         vector<MatchResult> results(lacerteNames.size());
-        mutex cout_mutex;
+        mutex cout_mutex, rebalance_mutex;
         const double EARLY_EXIT_THRESHOLD = 0.95;
 
         // Create length-based buckets
         unordered_map<size_t, vector<size_t>> lengthBuckets;
         for (size_t idx = 0; idx < precomputed.size(); idx++) {
-            size_t lengthBucket = precomputed[idx].clientName.length() / 5; // Group in ranges of 5
+            size_t lengthBucket = precomputed[idx].clientName.length() / 5;
             lengthBuckets[lengthBucket].push_back(idx);
         }
 
         const size_t num_threads = thread::hardware_concurrency();
         vector<thread> threads;
-        const size_t lacerte_chunk_size = max(size_t(1), lacerteNames.size() / num_threads);
+        const size_t initial_chunk_size = max(size_t(1), lacerteNames.size() / num_threads);
 
-        vector<atomic<size_t>> thread_progress(num_threads);
-        vector<atomic<size_t>> early_exits(num_threads);
-        vector<atomic<size_t>> comparisons_saved(num_threads);
+        // Thread status tracking
+        struct ThreadStatus {
+            atomic<size_t> current_pos;
+            atomic<size_t> end_pos;
+            atomic<bool> is_working;
+            atomic<size_t> processed_count;
+            atomic<size_t> early_exits;
+            atomic<size_t> comparisons_made;
+            atomic<size_t> possible_comparisons;
+        };
+        vector<ThreadStatus> thread_status(num_threads);
+
+        // Initialize thread status
+        for (size_t t = 0; t < num_threads; ++t) {
+            size_t start = t * initial_chunk_size;
+            size_t end = (t == num_threads - 1) ? lacerteNames.size()
+                                                : min((t + 1) * initial_chunk_size, lacerteNames.size());
+            thread_status[t].current_pos.store(start);
+            thread_status[t].end_pos.store(end);
+            thread_status[t].is_working.store(true);
+            thread_status[t].processed_count.store(0);
+            thread_status[t].early_exits.store(0);
+            thread_status[t].comparisons_made.store(0);
+            thread_status[t].possible_comparisons.store(0);
+        }
 
         for (size_t t = 0; t < num_threads; ++t) {
-            const size_t lacerte_start = t * lacerte_chunk_size;
-            const size_t lacerte_end = (t == num_threads - 1) ?
-                                       lacerteNames.size() : min((t + 1) * lacerte_chunk_size, lacerteNames.size());
+            threads.emplace_back([&, t]() {
+                size_t rebalance_attempts = 0;
+                const size_t MAX_REBALANCE_ATTEMPTS = 3;
 
-            if (lacerte_start >= lacerte_end) continue;
+                while (thread_status[t].is_working.load()) {
+                    // Process current chunk
+                    while (thread_status[t].current_pos.load() < thread_status[t].end_pos.load()) {
+                        size_t i = thread_status[t].current_pos.fetch_add(1);
+                        if (i >= thread_status[t].end_pos.load()) break;
 
-            threads.emplace_back([&, t, lacerte_start, lacerte_end]() {
-                size_t local_early_exits = 0;
-                size_t local_comparisons = 0;
-                size_t total_possible_comparisons = 0;
+                        const string& lacerteName = lacerteNames[i];
+                        double bestConfidence = 0.0;
+                        string bestMatch;
 
-                for (size_t i = lacerte_start; i < lacerte_end; ++i) {
-                    const string& lacerteName = lacerteNames[i];
-                    double bestConfidence = 0.0;
-                    string bestMatch;
+                        // Get candidates from length buckets
+                        set<size_t> candidateIndices;
+                        size_t currentBucket = lacerteName.length() / 5;
 
-                    // Get candidates from length buckets
-                    set<size_t> candidateIndices;
-                    size_t currentBucket = lacerteName.length() / 5;
-
-                    // Check current bucket and adjacent buckets
-                    for (int bucketOffset = -1; bucketOffset <= 1; bucketOffset++) {
-                        size_t bucket = currentBucket + bucketOffset;
-                        if (lengthBuckets.find(bucket) != lengthBuckets.end()) {
-                            const auto& indices = lengthBuckets[bucket];
-                            candidateIndices.insert(indices.begin(), indices.end());
-                        }
-                    }
-
-                    total_possible_comparisons += precomputed.size();
-                    local_comparisons += candidateIndices.size();
-
-                    // Compare with candidates
-                    for (size_t idx : candidateIndices) {
-                        if (idx >= precomputed.size()) continue; // Safety check
-
-                        double confidence = getMatchConfidence(lacerteName, precomputed[idx].clientName);
-                        if (confidence > bestConfidence) {
-                            bestConfidence = confidence;
-                            bestMatch = precomputed[idx].clientName;
-
-                            if (confidence >= EARLY_EXIT_THRESHOLD) {
-                                local_early_exits++;
-                                break;
+                        for (int bucketOffset = -1; bucketOffset <= 1; bucketOffset++) {
+                            size_t bucket = currentBucket + bucketOffset;
+                            if (lengthBuckets.find(bucket) != lengthBuckets.end()) {
+                                const auto& indices = lengthBuckets[bucket];
+                                candidateIndices.insert(indices.begin(), indices.end());
                             }
                         }
+
+                        thread_status[t].possible_comparisons.fetch_add(precomputed.size());
+                        thread_status[t].comparisons_made.fetch_add(candidateIndices.size());
+
+                        for (size_t idx : candidateIndices) {
+                            if (idx >= precomputed.size()) continue;
+
+                            double confidence = getMatchConfidence(lacerteName, precomputed[idx].clientName);
+                            if (confidence > bestConfidence) {
+                                bestConfidence = confidence;
+                                bestMatch = precomputed[idx].clientName;
+
+                                if (confidence >= EARLY_EXIT_THRESHOLD) {
+                                    thread_status[t].early_exits.fetch_add(1);
+                                    break;
+                                }
+                            }
+                        }
+
+                        results[i] = {lacerteName, bestMatch, bestConfidence};
+                        size_t processed = thread_status[t].processed_count.fetch_add(1) + 1;
+
+                        // Progress reporting
+                        size_t chunk_size = thread_status[t].end_pos.load() - thread_status[t].current_pos.load();
+                        size_t report_interval = max(size_t(1), chunk_size / 20);
+
+                        if (processed % report_interval == 0) {
+                            lock_guard<mutex> lock(cout_mutex);
+                            double progress = (100.0 * processed) / chunk_size;
+                            double comparison_reduction = 100.0 *
+                                                          (1.0 - (double)thread_status[t].comparisons_made.load() /
+                                                                 thread_status[t].possible_comparisons.load());
+
+                            cout << "Thread " << t << ": "
+                                 << processed << "/" << chunk_size
+                                 << " (" << fixed << setprecision(1) << progress << "%) "
+                                 << "Comparisons reduced by " << comparison_reduction << "%" << endl;
+                        }
                     }
 
-                    results[i] = {lacerteName, bestMatch, bestConfidence};
-                    thread_progress[t]++;
-
-                    // Progress reporting
-                    size_t report_interval = min(size_t(10), max(size_t(1), (lacerte_end - lacerte_start) / 20));
-                    if (thread_progress[t] % report_interval == 0) {
-                        lock_guard<mutex> lock(cout_mutex);
-                        double progress = (100.0 * thread_progress[t]) / (lacerte_end - lacerte_start);
-                        double comparison_reduction = 100.0 * (1.0 - (double)local_comparisons / total_possible_comparisons);
-                        cout << "Thread " << t << ": "
-                             << thread_progress[t] << "/" << (lacerte_end - lacerte_start)
-                             << " (" << fixed << setprecision(1) << progress << "%) "
-                             << "Comparisons reduced by " << comparison_reduction << "%" << endl;
+                    // Check if should stop rebalancing
+                    if (rebalance_attempts >= MAX_REBALANCE_ATTEMPTS) {
+                        thread_status[t].is_working.store(false);
+                        break;
                     }
-                }
 
-                early_exits[t] = local_early_exits;
-                comparisons_saved[t] = total_possible_comparisons - local_comparisons;
+                    // Try to steal work
+                    {
+                        lock_guard<mutex> lock(rebalance_mutex);
 
-                {
-                    lock_guard<mutex> lock(cout_mutex);
-                    double comparison_reduction = 100.0 * (1.0 - (double)local_comparisons / total_possible_comparisons);
-                    cout << "Thread " << t << " completed. "
-                         << thread_progress[t] << " names processed, "
-                         << local_early_exits << " early exits, "
-                         << "comparisons reduced by " << comparison_reduction << "%" << endl;
+                        size_t max_remaining = 0;
+                        size_t target_thread = num_threads;
+
+                        for (size_t other = 0; other < num_threads; ++other) {
+                            if (other == t) continue;
+
+                            size_t remaining = thread_status[other].end_pos.load() -
+                                               thread_status[other].current_pos.load();
+                            if (remaining > 1 && thread_status[other].is_working.load()) {
+                                if (remaining > max_remaining) {
+                                    max_remaining = remaining;
+                                    target_thread = other;
+                                }
+                            }
+                        }
+
+                        if (target_thread < num_threads && max_remaining > 1) {
+                            size_t steal_amount = max_remaining / 2;
+                            size_t target_end = thread_status[target_thread].end_pos.load();
+                            size_t new_start = target_end - steal_amount;
+
+                            thread_status[t].current_pos.store(new_start);
+                            thread_status[t].end_pos.store(target_end);
+                            thread_status[target_thread].end_pos.store(new_start);
+
+                            // Reset progress counters for new chunk
+                            thread_status[t].processed_count.store(0);
+                            thread_status[t].comparisons_made.store(0);
+                            thread_status[t].possible_comparisons.store(0);
+                            thread_status[t].early_exits.store(0);
+
+                            {
+                                lock_guard<mutex> lock(cout_mutex);
+                                cout << "Thread " << t << " received new chunk: "
+                                     << new_start << " to " << target_end
+                                     << " (stole " << steal_amount << " items from thread "
+                                     << target_thread << ")" << endl;
+                            }
+
+                            rebalance_attempts = 0;  // Reset after successful steal
+                            continue;
+                        }
+
+                        rebalance_attempts++;
+                        thread_status[t].is_working.store(false);
+                    }
                 }
             });
         }
 
+        // Join threads and collect final metrics
         for (auto& t : threads) {
             if (t.joinable()) t.join();
         }
@@ -593,11 +663,11 @@ namespace TaxReturnSystem {
         size_t total_comparisons_saved = 0;
         size_t total_possible = 0;
 
-        for (size_t t = 0; t < num_threads; ++t) {
-            total_processed += thread_progress[t];
-            total_early_exits += early_exits[t];
-            total_comparisons_saved += comparisons_saved[t];
-            total_possible += thread_progress[t] * precomputed.size();
+        for (const auto& status : thread_status) {
+            total_processed += status.processed_count.load();
+            total_early_exits += status.early_exits.load();
+            total_comparisons_saved += status.possible_comparisons.load() - status.comparisons_made.load();
+            total_possible += status.possible_comparisons.load();
         }
 
         double overall_reduction = 100.0 * (double)total_comparisons_saved / total_possible;
